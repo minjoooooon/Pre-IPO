@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import math
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -51,9 +52,14 @@ def _to_float(x: object) -> float | None:
     if x is None or x == "":
         return None
     try:
-        return float(x)  # type: ignore[arg-type]
+        v = float(x)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+    # Reject NaN and +/-Inf — these propagate silently through normalization,
+    # SQLite, and JSON and break the FE math.
+    if not math.isfinite(v):
+        return None
+    return v
 
 
 @dataclass
@@ -158,15 +164,23 @@ class OkxAdapter(ExchangeAdapter):
         not kill the stream (per-message try/except)."""
 
         inst_id = market.symbol
-        state = _ChannelState()
         backoff = settings.reconnect_initial_seconds
         max_backoff = settings.reconnect_max_seconds
 
         while True:
+            # Fresh per-connection state so a delisting/relisting during the
+            # disconnect doesn't carry old bid/ask/oi across the boundary.
+            state = _ChannelState()
             try:
                 async for tick in self._connect_once(inst_id, market, state):
                     backoff = settings.reconnect_initial_seconds  # reset on success
                     yield tick
+                # Clean close (server-initiated graceful close, scheduled
+                # maintenance, etc.). Treat as a soft restart — without this
+                # backoff the outer `while True` would spin and rate-limit us.
+                log.info("okx_clean_close", inst_id=inst_id, backoff=backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # noqa: BLE001
@@ -226,12 +240,20 @@ class OkxAdapter(ExchangeAdapter):
     async def _heartbeat(self, ws: websockets.ClientConnection) -> None:
         try:
             while True:
-                await asyncio.sleep(20)
-                await ws.send("ping")
+                await asyncio.sleep(settings.okx_heartbeat_interval_seconds)
+                try:
+                    await ws.send("ping")
+                except Exception as e:  # noqa: BLE001
+                    # A failed ping means the socket is dead. Close it so the
+                    # outer `async for raw in ws` raises and reconnect kicks in
+                    # — without this the reader can wait on a dead socket
+                    # indefinitely.
+                    log.warning("okx_heartbeat_send_failed", error=repr(e))
+                    with contextlib.suppress(Exception):
+                        await ws.close()
+                    return
         except asyncio.CancelledError:
             raise
-        except Exception as e:  # noqa: BLE001
-            log.warning("okx_heartbeat_send_failed", error=repr(e))
 
     def _handle_message(
         self, raw: str | bytes, market: Market, state: _ChannelState
@@ -251,6 +273,11 @@ class OkxAdapter(ExchangeAdapter):
             if event == "error":
                 self._stats.last_error = msg.get("msg", "subscribe error")
                 log.warning("okx_event_error", payload=msg)
+                # Subscribe rejection (bad instId, banned IP, auth fail) leaves
+                # the WS open with no data. Raise so the outer reconnect path
+                # closes and retries instead of silently idling until stale
+                # detection fires 60s later.
+                raise RuntimeError(f"OKX event error: {msg.get('msg')!r} code={msg.get('code')}")
             return None
 
         arg = msg.get("arg") or {}
@@ -268,12 +295,27 @@ class OkxAdapter(ExchangeAdapter):
         # the latest price is used.
         emit_tick = False
         if channel == "tickers":
-            state.last_price = _to_float(row.get("last")) or state.last_price
-            state.bid = _to_float(row.get("bidPx"))
-            state.ask = _to_float(row.get("askPx"))
+            # Only overwrite fields when the parsed value is a number. OKX may
+            # emit a tickers frame with `last` present but `bidPx`/`askPx`
+            # omitted (illiquid book); blanket-assigning None would erase a
+            # valid quote and make spread_bp flicker between defined and
+            # undefined on every other tick. Explicit `is not None` also
+            # guards against the `or`-falsy bug where a legitimate 0.0 (halt,
+            # delisting) gets masked by the previous price.
+            v = _to_float(row.get("last"))
+            if v is not None:
+                state.last_price = v
+            v = _to_float(row.get("bidPx"))
+            if v is not None:
+                state.bid = v
+            v = _to_float(row.get("askPx"))
+            if v is not None:
+                state.ask = v
             # vol24h is in contracts for SWAP; volCcy24h is also contracts here
             # (ctValCcy == base currency). Multiply by price below to get USD.
-            state.vol24 = _to_float(row.get("vol24h"))
+            v = _to_float(row.get("vol24h"))
+            if v is not None:
+                state.vol24 = v
             ts_ms = _to_float(row.get("ts"))
             state.last_ticker_ts = ts_ms / 1000.0 if ts_ms else None
             emit_tick = True

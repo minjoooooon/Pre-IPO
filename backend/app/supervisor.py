@@ -28,6 +28,11 @@ class _SupervisedAdapter:
     adapter: ExchangeAdapter
     market: Market
     task: asyncio.Task | None = None
+    # Wall-clock time when the supervisor last (re)entered the "connected"
+    # state for this adapter. Used to detect never-ticked stale: an adapter
+    # that subscribes but never receives a tick should still go stale once
+    # `connected_at` ages past `stale_threshold_seconds`.
+    connected_at: float | None = None
     status: AdapterStatus = field(init=False)
 
     def __post_init__(self) -> None:
@@ -85,26 +90,38 @@ class Supervisor:
     async def _run_with_restart(self, sa: _SupervisedAdapter) -> None:
         backoff = settings.reconnect_initial_seconds
         while self._running:
+            sa.connected_at = time.time()
+            # Preserve last_error across status resets so /health and the FE
+            # badge keep showing the most recent crash reason until the next
+            # one supersedes it.
             sa.status = AdapterStatus(
                 exchange=sa.adapter.exchange_id,
                 state="connected",
                 last_tick_at=sa.status.last_tick_at,
                 reconnect_count=sa.status.reconnect_count,
+                last_error=sa.status.last_error,
             )
+            clean_exit = False
             try:
                 async for tick in sa.adapter.stream(sa.market):
                     sa.status.last_tick_at = time.time()
                     if sa.status.state != "connected":
                         sa.status.state = "connected"
+                    # A healthy tick means the connection works — reset the
+                    # restart backoff so the next genuine disconnect starts
+                    # from `reconnect_initial_seconds` again instead of staying
+                    # pinned at `reconnect_max_seconds` forever.
+                    backoff = settings.reconnect_initial_seconds
                     try:
                         await self._sink(tick)
                     except Exception as e:  # noqa: BLE001
                         # Sink failures must not kill the stream
                         log.exception("supervisor_sink_error", error=repr(e))
-                # generator returned normally
+                # generator returned normally — adapter chose to end its
+                # stream. Treat as a soft restart with backoff (not as a crash).
                 if not self._running:
                     return
-                raise RuntimeError("adapter stream exited unexpectedly")
+                clean_exit = True
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # noqa: BLE001
@@ -120,23 +137,45 @@ class Supervisor:
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, settings.reconnect_max_seconds)
+                continue
+
+            if clean_exit:
+                sa.status.state = "reconnecting"
+                log.info(
+                    "supervisor_adapter_clean_exit",
+                    exchange=sa.adapter.exchange_id,
+                    backoff=backoff,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, settings.reconnect_max_seconds)
 
     async def _stale_loop(self) -> None:
         """Every 30s, mark any adapter with no tick in stale_threshold_seconds
-        as 'stale'. The aggregator can use this to update broadcasts."""
+        as 'stale'. The aggregator can use this to update broadcasts.
+
+        A never-ticked adapter (subscribed but no first tick) is also marked
+        stale once `connected_at` ages past the threshold — otherwise a
+        wedged subscription with no data would sit `connected` forever."""
         while self._running:
             await asyncio.sleep(30)
             now = time.time()
             for sa in self._adapters:
                 if sa.status.state in ("disabled", "reconnecting", "disconnected"):
                     continue
-                if sa.status.last_tick_at is None:
-                    continue
-                if now - sa.status.last_tick_at > settings.stale_threshold_seconds:
+                # Reference point: last tick if we ever got one, otherwise the
+                # time we (re)entered the "connected" state.
+                reference = sa.status.last_tick_at
+                if reference is None:
+                    reference = sa.connected_at
+                if reference is None:
+                    continue  # task not yet started
+                age = now - reference
+                if age > settings.stale_threshold_seconds:
                     if sa.status.state != "stale":
                         sa.status.state = "stale"
                         log.warning(
                             "adapter_stale",
                             exchange=sa.adapter.exchange_id,
-                            last_tick_age=now - sa.status.last_tick_at,
+                            last_tick_age=age,
+                            never_ticked=sa.status.last_tick_at is None,
                         )

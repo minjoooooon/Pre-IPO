@@ -7,8 +7,10 @@ badge instead of a misleading number."""
 
 from __future__ import annotations
 
+import math
 import time
 
+from .config import settings
 from .models import Asset, CalibrationStatus, Market, NormalizedQuote, Tick
 
 
@@ -18,8 +20,23 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
     if tick.bid is not None and tick.ask is not None and tick.bid > 0:
         spread_bp = ((tick.ask - tick.bid) / tick.bid) * 10_000
 
-    is_stale = (now - tick.timestamp) > 60
-    if market.share_ratio is None or market.ratio_source == "uncalibrated":
+    # Future-skewed timestamps (clock drift) are surfaced as stale rather than
+    # silently "fresh", so the FE shows a warning instead of a confident chart.
+    if tick.timestamp > now + settings.max_clock_skew_seconds:
+        is_stale = True
+    else:
+        is_stale = (now - tick.timestamp) > settings.stale_threshold_seconds
+
+    # share_ratio guards: None, "uncalibrated" source, zero, negative, or
+    # non-finite all route to the uncalibrated branch so we never divide-by-zero
+    # or emit a NaN/Inf FDV.
+    bad_ratio = (
+        market.share_ratio is None
+        or market.ratio_source == "uncalibrated"
+        or market.share_ratio <= 0
+        or not math.isfinite(market.share_ratio)
+    )
+    if bad_ratio:
         return NormalizedQuote(
             asset_id=market.asset_id,
             exchange=market.exchange,

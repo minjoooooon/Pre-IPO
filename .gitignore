@@ -41,3 +41,7 @@ Thumbs.db
 .env
 .env.*
 *.local
+AUDIT_LOG.md
+codex_slice_*.md
+claude_slice_*.md
+slice_*_prompt.txt

@@ -29,6 +29,7 @@ class Aggregator:
         self._subscribers: set[asyncio.Queue[dict]] = set()
         self._pending_flush: list[NormalizedQuote] = []
         self._flush_task: asyncio.Task | None = None
+        self._retention_task: asyncio.Task | None = None
         self._statuses_cb = None  # set by lifespan: callable returning AdapterStatus[]
         self._running = False
 
@@ -67,14 +68,16 @@ class Aggregator:
         )
 
         self._flush_task = asyncio.create_task(self._flush_loop(), name="agg:flush")
+        self._retention_task = asyncio.create_task(self._retention_loop(), name="agg:retention")
         log.info("aggregator_started")
 
     async def stop(self) -> None:
         self._running = False
-        if self._flush_task is not None:
-            self._flush_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._flush_task
+        for t in (self._flush_task, self._retention_task):
+            if t is not None:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
         # final flush
         await self._flush_now()
         log.info("aggregator_stopped")
@@ -93,6 +96,16 @@ class Aggregator:
         quote = normalize(tick, market, asset)
         self._ring_push(quote)
         self._pending_flush.append(quote)
+        # Bound the queue. If SQLite has been failing for hours, prefer to drop
+        # the oldest pending entries (with a loud log) over OOMing the process.
+        overflow = len(self._pending_flush) - settings.pending_flush_max
+        if overflow > 0:
+            del self._pending_flush[:overflow]
+            log.warning(
+                "aggregator_pending_overflow",
+                dropped=overflow,
+                pending=len(self._pending_flush),
+            )
         await self._broadcast({"type": "tick", "quote": quote.model_dump(mode="json")})
 
     # ---- WS subscription ----
@@ -164,9 +177,26 @@ class Aggregator:
             log.warning("dropped_slow_subscriber")
 
     async def _flush_loop(self) -> None:
+        # First flush happens sooner so warm-up data survives a same-minute crash.
+        await asyncio.sleep(settings.tick_batch_first_flush_seconds)
+        await self._flush_now()
         while self._running:
             await asyncio.sleep(settings.tick_batch_flush_seconds)
             await self._flush_now()
+
+    async def _retention_loop(self) -> None:
+        """Periodically delete ticks older than history_retention_days.
+        Without this, ticks.db grows without bound on a 24/7 process."""
+        while self._running:
+            await asyncio.sleep(settings.retention_cleanup_interval_seconds)
+            try:
+                deleted = await self._store.cleanup_older_than(settings.history_retention_days)
+                if deleted > 0:
+                    log.info("aggregator_retention_cleanup", deleted=deleted)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                log.exception("aggregator_retention_failed", error=repr(e))
 
     async def _flush_now(self) -> None:
         if not self._pending_flush:

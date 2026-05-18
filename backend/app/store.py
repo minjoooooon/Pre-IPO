@@ -5,13 +5,17 @@ Uses WAL mode + batched inserts for safe concurrent reads."""
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterable
 
 import aiosqlite
+import structlog
 
 from .config import settings
 from .models import NormalizedQuote
+
+log = structlog.get_logger("app.store")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ticks (
@@ -37,9 +41,16 @@ CREATE INDEX IF NOT EXISTS idx_market_time ON ticks (market_id, timestamp DESC);
 class TickStore:
     def __init__(self) -> None:
         self._db: aiosqlite.Connection | None = None
+        # aiosqlite serialises ops through a single thread, but we still wrap
+        # every write in this lock so an `executemany` + `commit` pair cannot
+        # be interleaved with another writer's `execute` + `commit` and share
+        # an implicit transaction.
+        self._write_lock = asyncio.Lock()
 
     async def init(self) -> None:
-        self._db = await aiosqlite.connect(settings.db_path)
+        # Coerce to str: aiosqlite/sqlite3 historically wanted str, and Windows
+        # paths with non-ASCII / spaces can trip Path passthrough on some builds.
+        self._db = await aiosqlite.connect(str(settings.db_path))
         await self._db.execute("PRAGMA journal_mode=WAL;")
         await self._db.execute("PRAGMA synchronous=NORMAL;")
         for stmt in SCHEMA.split(";"):
@@ -75,17 +86,24 @@ class TickStore:
         ]
         if not rows:
             return 0
-        await self._db.executemany(
-            """
-            INSERT OR IGNORE INTO ticks
-              (market_id, asset_id, exchange, token_price, implied_share_price, implied_fdv,
-               vol24, oi, funding_rate, confidence, calibration_status, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-        await self._db.commit()
-        return len(rows)
+        async with self._write_lock:
+            async with self._db.cursor() as cur:
+                await cur.executemany(
+                    """
+                    INSERT OR IGNORE INTO ticks
+                      (market_id, asset_id, exchange, token_price, implied_share_price, implied_fdv,
+                       vol24, oi, funding_rate, confidence, calibration_status, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+                inserted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else len(rows)
+            await self._db.commit()
+        if inserted < len(rows):
+            # Duplicate (market_id, timestamp) collisions — exchange re-emitted
+            # the same ts, or poll loop returned an unchanged frame.
+            log.debug("store_dupe_ts_dropped", attempted=len(rows), inserted=inserted)
+        return inserted
 
     async def replay_recent(self, asset_id: str, seconds: int) -> list[dict]:
         """Return ticks for an asset newer than (now - seconds), oldest first."""
@@ -111,9 +129,12 @@ class TickStore:
         if self._db is None:
             raise RuntimeError("TickStore not initialized")
         cutoff = time.time() - days * 86_400
-        cursor = await self._db.execute("DELETE FROM ticks WHERE timestamp < ?", (cutoff,))
-        await self._db.commit()
-        return cursor.rowcount or 0
+        async with self._write_lock:
+            cursor = await self._db.execute("DELETE FROM ticks WHERE timestamp < ?", (cutoff,))
+            await self._db.commit()
+            rowcount = cursor.rowcount or 0
+            await cursor.close()
+        return rowcount
 
 
 _store: TickStore | None = None
