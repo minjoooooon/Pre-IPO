@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# SQLite runtime state (regenerable; large with WAL)
+backend/ticks.db
+backend/ticks.db-wal
+backend/ticks.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Backend logs (rotated)
+backend/logs/
+
+# Codex review artifacts (regenerable, can be re-run)
+codex_review*.md
+
+# Node (only if someone later adds frontend Vite project)
+node_modules/
+.next/
+dist/
+.cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local secrets / drafts
+.env
+.env.*
+*.local

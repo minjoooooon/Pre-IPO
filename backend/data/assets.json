@@ -1,0 +1,58 @@
+{
+  "assets": [
+    {
+      "id": "SPACEX",
+      "ticker": "SPX.PRE",
+      "name": "SpaceX",
+      "sector": "Aerospace / Space",
+      "fully_diluted_shares": 11870000000,
+      "shares_source": "Bloomberg Dec 2025 tender offer ($800B at $421/share = 1.9B pre-split shares) x 5-for-1 split approved 2026-05-16",
+      "shares_source_url": "https://www.bloomberg.com/news/articles/2025-12-13/spacex-sets-insider-share-deal-at-about-800-billion-valuation",
+      "shares_confidence": 65,
+      "shares_last_updated": "2026-05-16",
+      "last_round": {
+        "date": "2025-12",
+        "price": 421.00,
+        "valuation": 800000000000
+      },
+      "reference_share_price": 67.40,
+      "headline": "Starship V3 cadence ramp; June 2026 IPO target $1.75T"
+    },
+    {
+      "id": "OPENAI",
+      "ticker": "OAI.PRE",
+      "name": "OpenAI",
+      "sector": "AI / Foundation Models",
+      "fully_diluted_shares": 2400000000,
+      "shares_source": "Reported tender offer Oct 2025 at approx $500B valuation; share count estimated from per-share secondary prices. ESTIMATE - low confidence.",
+      "shares_source_url": "https://www.bloomberg.com/news/articles/2025-10/openai-tender-offer",
+      "shares_confidence": 45,
+      "shares_last_updated": "2025-10-15",
+      "last_round": {
+        "date": "2025-10",
+        "price": 210.00,
+        "valuation": 500000000000
+      },
+      "reference_share_price": 208.33,
+      "headline": "$500B tender Oct 2025; 3.2x oversubscribed per secondary desks"
+    },
+    {
+      "id": "ANTHROPIC",
+      "ticker": "ANT.PRE",
+      "name": "Anthropic",
+      "sector": "AI / Foundation Models",
+      "fully_diluted_shares": 1790000000,
+      "shares_source": "Series F approx $183B post (early 2026); fully-diluted share count estimated from secondary-market trackers. ESTIMATE - low confidence.",
+      "shares_source_url": "https://www.reuters.com/anthropic-series-f",
+      "shares_confidence": 40,
+      "shares_last_updated": "2026-02-15",
+      "last_round": {
+        "date": "2026-02",
+        "price": 102.00,
+        "valuation": 183000000000
+      },
+      "reference_share_price": 102.23,
+      "headline": "Series F at $183B post; Amazon $4B follow-on commitment"
+    }
+  ]
+}

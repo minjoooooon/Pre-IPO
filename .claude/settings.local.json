@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:binance-docs.github.io)",
+      "WebFetch(domain:www.okx.com)",
+      "WebFetch(domain:hyperliquid.gitbook.io)",
+      "WebFetch(domain:www.mexc.com)",
+      "WebFetch(domain:www.bitget.com)",
+      "WebFetch(domain:developers.binance.com)",
+      "WebFetch(domain:docs.hyperliquid.xyz)",
+      "Bash(where codex *)",
+      "Bash(codex --version)",
+      "Bash(codex --help)",
+      "Bash(codex exec *)"
+    ]
+  }
+}

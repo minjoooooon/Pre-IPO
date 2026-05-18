@@ -1,0 +1,88 @@
+{
+  "markets": [
+    {
+      "asset_id": "SPACEX",
+      "exchange": "hyperliquid",
+      "symbol": "SPCX",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": null,
+      "ratio_source": "uncalibrated",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": null,
+      "confidence": 0,
+      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions",
+      "notes": "SPCX not in core perp universe (probe 2026-05-18). Available only via Trade.xyz HIP-3 builder-deployed market; routing requires deployer-specific endpoints not yet implemented. | [discover 2026-05-18] discover failed: SPCX not in core perp universe (size=230); likely HIP-3 builder-deployed, routing not yet implemented"
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "okx",
+      "symbol": "SPACEX-USDT-SWAP",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": 800000000000.0,
+      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
+      "confidence": 40,
+      "doc_url": "https://www.okx.com/docs-v5/en/",
+      "notes": "[calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 — literal interpretation = 1 contract represents 1 SpaceX share unit. No official OKX product brief found that explicitly states shares-per-contract; flagged market-fitted (confidence 40). User can override via /api/admin in P7. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $800B from assets.json last_round.valuation. Override via /api/admin if needed."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "bitget",
+      "symbol": "PRESPAXUSDT",
+      "venue": "CEX",
+      "structure": "mirror-credit",
+      "share_ratio": 1.0,
+      "ratio_source": "official",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
+      "confidence": 70,
+      "doc_url": "https://www.bitget.com/blog/articles/bitget-ipo-prime-prespax-subscription-launch",
+      "notes": "Republic-backed mirror credit (1:1 with post-IPO stock). Listed as SPOT on Bitget (probe 2026-05-18, not mix-futures). REST polling via /api/v2/spot/market/tickers?symbol=PRESPAXUSDT | [calibrated 2026-05-18] Republic mirror-credit structure: 1 preSPAX = 1 unit of SpaceX post-IPO stock performance (per Republic.com/rspax). Bitget IPO Prime issued via Republic with same 1:1 economic exposure. ratio=1.0, source=official, confidence=70. | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 token = 1 unit of SPACEX post-IPO stock performance. ratio=1.0, source=official, confidence=70."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "okx",
+      "symbol": "OPENAI-USDT-SWAP",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": 500000000000.0,
+      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
+      "confidence": 40,
+      "doc_url": "https://www.okx.com/docs-v5/en/",
+      "notes": "Probe 2026-05-18: ctVal=1, ctValCcy=OPENAI, state=live. last~$1386. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=OPENAI, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $500B from assets.json last_round.valuation. Override via /api/admin if needed."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "bitget",
+      "symbol": "PREOPAIUSDT",
+      "venue": "CEX",
+      "structure": "mirror-credit",
+      "share_ratio": 1.0,
+      "ratio_source": "official",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
+      "confidence": 70,
+      "doc_url": "https://www.bitget.com/blog/articles/bitget-ipo-prime",
+      "notes": "Probe 2026-05-18: preOPAI spot listing, last~$884, quoteVol24~$817K. Republic mirror-credit pattern (same as preSPAX). | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 token = 1 unit of OPENAI post-IPO stock performance. ratio=1.0, source=official, confidence=70."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "okx",
+      "symbol": "ANTHROPIC-USDT-SWAP",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": 183000000000.0,
+      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
+      "confidence": 40,
+      "doc_url": "https://www.okx.com/docs-v5/en/",
+      "notes": "Probe 2026-05-18: ctVal=1, ctValCcy=ANTHROPIC, state=live. last~$1598. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=ANTHROPIC, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $183B from assets.json last_round.valuation. Override via /api/admin if needed."
+    }
+  ]
+}
