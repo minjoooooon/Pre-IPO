@@ -1279,60 +1279,49 @@ function VenueCards({ asset, norm }) {
         {rows.map((r) => {
           const premRef = ((r.impliedFDV / refFdv) - 1) * 100;
           const premCons = cons > 0 ? ((r.impliedFDV / cons) - 1) * 100 : 0;
-          const f = r.fundingRate; // decimal fraction (e.g. 0.0001)
-          const fPct = f != null ? f * 100 : null;
+          const fPct = r.fundingRate != null ? r.fundingRate * 100 : null;
           const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
+          // Hover-only detail block. Avoids cluttering the at-a-glance card.
+          const hoverTitle =
+            `${r.ex} · ${r.symbol || ""}\n` +
+            `Token: $${fmtNum(r.tokenPrice)}\n` +
+            `Ratio: 1 : ${fmtNum(r.shareRatio, 4)} (${SRC_META[r.ratioSource]?.label || r.ratioSource})\n` +
+            `Confidence: ${r.confidence}/100`;
           return (
-            <div key={r.ex} className={"venue-card " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")}>
+            <div
+              key={r.ex}
+              className={"venue-card " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")}
+              title={hoverTitle}
+            >
               <div className="vc-head">
                 <div className="vc-head-l">
                   <span className="vc-name">{r.ex}</span>
-                  <span className="vc-sub muted">{r.venue} · {meta.label}</span>
+                  <span className="vc-sub muted">{meta.label} · {r.venue}</span>
                 </div>
-                <span className={"struct-pill tone-" + meta.tone} title={meta.label}>{meta.sym}</span>
+                <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
               </div>
 
-              <div className="vc-fdv mono accent strong">
-                ${fmtUSD(r.impliedFDV)}
-              </div>
-              <div className={"vc-prem mono strong " + (premRef >= 0 ? "ok" : "bad")} title={`vs $${fmtUSD(refFdv)} (${asset.lastRound.date} round)`}>
-                {fmtPremium(premRef)}
-                <span className="vc-prem-l muted"> vs ref</span>
-              </div>
+              <div className="vc-main mono accent">${fmtUSD(r.impliedFDV)}</div>
 
-              <div className="vc-row">
-                <span className="vc-row-k muted">Token</span>
-                <span className="vc-row-v mono">${fmtNum(r.tokenPrice)}</span>
+              <div className="vc-stat">
+                <span className={"vc-stat-v mono " + (premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
+                <span className="vc-stat-k muted">변동</span>
               </div>
-              {r.symbol && (
-                <div className="vc-row">
-                  <span className="vc-row-k muted">Ticker</span>
-                  <span className="vc-row-v mono vc-ticker" title="exchange symbol">{r.symbol}</span>
-                </div>
-              )}
-              <div className="vc-row">
-                <span className="vc-row-k muted">Vol 24h</span>
-                <span className="vc-row-v mono">${fmtUSD(r.vol24)}</span>
+              <div className="vc-stat">
+                <span className="vc-stat-v mono">{r.vol24 ? "$" + fmtUSD(r.vol24) : "—"}</span>
+                <span className="vc-stat-k muted">거래량</span>
               </div>
-              <div className="vc-row">
-                <span className="vc-row-k muted">Funding</span>
-                <span className={"vc-row-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
+              <div className="vc-stat">
+                <span className={"vc-stat-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
                   {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
                 </span>
+                <span className="vc-stat-k muted">펀비</span>
               </div>
-              <div className="vc-row">
-                <span className="vc-row-k muted">vs Cons.</span>
-                <span className={"vc-row-v mono " + (premCons >= 0 ? "ok" : "bad")}>
+              <div className="vc-stat">
+                <span className={"vc-stat-v mono " + (premCons >= 0 ? "ok" : "bad")}>
                   {cons > 0 ? fmtPct(premCons, 2) : "—"}
                 </span>
-              </div>
-
-              <div className="vc-foot">
-                <div className="confbar small" title={`confidence ${r.confidence}/100 · source: ${SRC_META[r.ratioSource]?.label || r.ratioSource}`}>
-                  <div className={"confbar-fill " + confClass(r.confidence)} style={{ width: r.confidence + "%" }} />
-                </div>
-                <span className="mono vc-conf muted">{r.confidence}</span>
-                <TickAge tickAt={r.tickAt} />
+                <span className="vc-stat-k muted">갭(%)</span>
               </div>
             </div>
           );
@@ -1341,26 +1330,25 @@ function VenueCards({ asset, norm }) {
         {disabled.map((d) => {
           const meta = STRUCT_META[d.structure] || { sym: "?", tone: "neutral", label: d.structure };
           return (
-            <div key={"dis-" + d.ex} className="venue-card vc-disabled">
+            <div key={"dis-" + d.ex} className="venue-card vc-disabled" title={d.reason}>
               <div className="vc-head">
                 <div className="vc-head-l">
                   <span className="vc-name muted">{d.ex}</span>
-                  <span className="vc-sub muted">{d.venue || "?"} · {meta.label}</span>
+                  <span className="vc-sub muted">{meta.label} · {d.venue || "?"}</span>
                 </div>
                 <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
               </div>
-              <div className="vc-fdv mono muted">—</div>
-              <div className="vc-prem muted">disabled</div>
+              <div className="vc-main mono muted">—</div>
+              <div className="vc-stat">
+                <span className="vc-stat-v mono muted">disabled</span>
+                <span className="vc-stat-k muted">상태</span>
+              </div>
               {d.symbol && (
-                <div className="vc-row">
-                  <span className="vc-row-k muted">Ticker</span>
-                  <span className="vc-row-v mono vc-ticker muted">{d.symbol}</span>
+                <div className="vc-stat">
+                  <span className="vc-stat-v mono muted vc-ticker">{d.symbol}</span>
+                  <span className="vc-stat-k muted">티커</span>
                 </div>
               )}
-              <div className="vc-row">
-                <span className="vc-row-k muted">Reason</span>
-                <span className="vc-row-v mono muted vc-reason" title={d.reason}>{d.reason}</span>
-              </div>
             </div>
           );
         })}
