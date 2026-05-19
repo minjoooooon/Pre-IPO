@@ -20,13 +20,13 @@
       "symbol": "SPACEX-USDT-SWAP",
       "venue": "CEX",
       "structure": "perp",
-      "share_ratio": 1.0,
-      "ratio_source": "market-fitted",
-      "ratio_reference_fdv": 800000000000.0,
-      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
-      "confidence": 40,
-      "doc_url": "https://www.okx.com/docs-v5/en/",
-      "notes": "[calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. No official OKX product brief explicitly states shares-per-contract; flagged market-fitted (confidence 40). Reference FDV anchor: $800B from assets.json last_round.valuation. Override via /api/admin if needed."
+      "share_ratio": 11.87,
+      "ratio_source": "official",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T01:00:00Z",
+      "confidence": 75,
+      "doc_url": "https://www.okx.com/en-us/help/okx-to-list-pre-ipo-pre-market-perpetual-futures-for-spacex-usdt-openai-usdt-and-anthropic-usdt",
+      "notes": "[recalibrated 2026-05-19] OKX announcement explicitly states 'Estimated share count: 1,000,000,000' and '1 SPACEX ≈ 1/1,000,000,000 of the company's market cap'. OKX prices the contract against an indexed valuation model with a 1B-share denominator, not actual fully-diluted shares. Derivation: share_ratio = fully_diluted_shares / OKX_estimated_basis = 11.87B / 1B = 11.87. Sanity check: at token price P, OKX-intended FDV = P × 1B; our normalizer = (P / 11.87) × 11.87B = P × 1B. ✅ Trigger for recalibration: when SpaceX files S-1, OKX will execute a proportional rebase to preserve position value (1 SPACEX = 1 actual share post-rebase) - bump share_ratio accordingly and update ratio_calibrated_at. Instrument metadata (ctVal=1, ctValCcy=SPACEX, ctMult=1) describes 1 contract = 1 SPACEX unit; the unit's economic meaning is set by the announcement, not by ctVal."
     },
     {
       "asset_id": "SPACEX",
