@@ -2,17 +2,31 @@
   "markets": [
     {
       "asset_id": "SPACEX",
-      "exchange": "hyperliquid",
-      "symbol": "SPCX",
+      "exchange": "hl-xyz",
+      "symbol": "xyz:SPCX",
       "venue": "DEX",
       "structure": "perp",
-      "share_ratio": null,
-      "ratio_source": "uncalibrated",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": null,
-      "confidence": 0,
-      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions",
-      "notes": "[discover 2026-05-18] SPCX not in core perp universe (size=230); available only via Trade.xyz HIP-3 builder-deployed market; routing requires deployer-specific endpoints not yet implemented."
+      "ratio_calibrated_at": "2026-05-20T04:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals",
+      "notes": "[discover 2026-05-20] HIP-3 builder-deployed perp on dex='xyz' (fullName='XYZ', deployer=0x88806a71d74ad0a510b350545c9ae490912f0888). Lives alongside stock-style perps (AAPL, TSLA, NVDA, GOLD, ...). Live data: POST https://api.hyperliquid.xyz/info {\"type\":\"allMids\",\"dex\":\"xyz\"} → {\"xyz:SPCX\":\"<mid>\", ...}. Probe 2026-05-20: mid=$198.98. share_ratio=1.0 is a FIRST-GUESS based on the venue category (XYZ DEX co-lists stocks 1:1 with share price), NOT a published spec — confidence=30, ratio_source=market-fitted. Sanity at $198.98: implied_FDV = 198.98 * 11.87B ≈ $2.36T (~26% premium vs IPO target $1.75T; on the high end vs Bitget $1.89T / Gate $1.87T). Confirm/recalibrate when XYZ publishes oracle/share-basis docs."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "hl-vntl",
+      "symbol": "vntl:SPACEX",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 11.87,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T04:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals",
+      "notes": "[discover 2026-05-20] HIP-3 builder-deployed perp on dex='vntl' (fullName='Ventuals', deployer=0x8888888192a4a0593c13532ba48449fc24c3beda). Ventuals creates perp markets where the underlying is total company valuation, not share price (CCN.com 2026 coverage). Live data: POST https://api.hyperliquid.xyz/info {\"type\":\"allMids\",\"dex\":\"vntl\"} → {\"vntl:SPACEX\":\"<mid>\", ...}. Probe 2026-05-20: mid=$2125.1. share_ratio=11.87 is a FIRST-GUESS treating the venue like OKX's '1 unit ≈ 1/1B of market cap' convention (so basis=1B, share_ratio = 11.87B / 1B), NOT a published spec — confidence=30, ratio_source=market-fitted. Sanity at $2125.1: implied_FDV = (2125.1/11.87)*11.87B ≈ $2.125T (~21% premium vs IPO target $1.75T, cross-checks within 12% of XYZ $2.36T). Confirm/recalibrate when Ventuals publishes oracle methodology."
     },
     {
       "asset_id": "SPACEX",

@@ -59,7 +59,12 @@ log = structlog.get_logger("app.main")
 
 # Wiring registry: which adapter handles which exchange_id
 _ADAPTER_CLASSES = {
-    "hyperliquid": HyperliquidAdapter,
+    # Hyperliquid HIP-3 builder DEXes are distinct routes (different `dex`
+    # parameter on /info), so each is registered as its own exchange key.
+    # They share the HyperliquidAdapter class — the adapter reads
+    # market.symbol ("xyz:SPCX" / "vntl:SPACEX") to know which dex to poll.
+    "hl-xyz":  HyperliquidAdapter,
+    "hl-vntl": HyperliquidAdapter,
     "okx": OkxAdapter,
     "bitget": BitgetAdapter,
     "gate": GateAdapter,
@@ -100,12 +105,11 @@ async def lifespan(app: FastAPI):
             continue
         adapter = adapter_cls()
         supervisor.register(adapter, market)
-        # Disable adapters whose stream() is not yet implemented or whose
-        # market is uncalibrated. Hyperliquid HIP-3 routing = P12+.
+        # Disable adapters whose market is still uncalibrated. The previous
+        # `hyperliquid` blanket-disable is gone now that the adapter understands
+        # HIP-3 builder DEXes (hl-xyz, hl-vntl) via dex-prefixed symbols.
         if market.ratio_source == "uncalibrated":
             supervisor.disable(market.exchange, "uncalibrated: ratio not set")
-        elif market.exchange == "hyperliquid":
-            supervisor.disable(market.exchange, "deferred: HIP-3 routing not yet implemented")
 
     await aggregator.start()
     await supervisor.start()
