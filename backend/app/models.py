@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 VenueType = Literal["DEX", "CEX"]
-Structure = Literal["SPV-backed", "SPV-mirror", "synthetic", "mirror-credit", "perp"]
+Structure = Literal["SPV-backed", "SPV-mirror", "synthetic", "mirror-credit", "perp", "pre-ipo-certificate"]
 RatioSource = Literal["official", "whitepaper", "back-solved", "market-fitted", "uncalibrated"]
 CalibrationStatus = Literal["calibrated", "uncalibrated", "stale"]
 AdapterState = Literal["connected", "reconnecting", "disconnected", "stale", "disabled"]
