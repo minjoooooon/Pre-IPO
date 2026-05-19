@@ -1128,3 +1128,105 @@ body {
   border-radius: 3px;
 }
 .footbar .sep { margin: 0 8px; }
+
+/* ============================================================
+ * VenueCards — at-a-glance per-exchange grid
+ * Replaces the time-series chart as the primary cross-venue view.
+ * Card density tuned for ~5–8 venues on a 1440px viewport.
+ * ============================================================ */
+.venue-cards-panel { padding-bottom: 16px; }
+
+.venue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 4px 14px 14px 14px;
+}
+
+.venue-card {
+  background: var(--bg-1);
+  border: 1px solid var(--bd-1);
+  border-radius: 4px;
+  padding: 12px 12px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  position: relative;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.venue-card:hover { border-color: var(--bd-2); }
+
+.venue-card.flash-up   { animation: vc-flash-up   600ms ease-out; }
+.venue-card.flash-down { animation: vc-flash-down 600ms ease-out; }
+@keyframes vc-flash-up {
+  0%   { background: rgba(74,222,128,0.14); }
+  100% { background: var(--bg-1); }
+}
+@keyframes vc-flash-down {
+  0%   { background: rgba(255,92,108,0.14); }
+  100% { background: var(--bg-1); }
+}
+
+.vc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vc-head-l { display: flex; flex-direction: column; min-width: 0; }
+.vc-name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--tx-1);
+}
+.vc-sub { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.vc-fdv {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+.vc-prem {
+  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.vc-prem-l { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.vc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.vc-row-k { font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+.vc-row-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; text-align: right; }
+.vc-ticker { font-size: 10px; }
+.vc-reason { font-size: 10px; max-width: 120px; }
+
+.vc-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bd-1);
+}
+.vc-conf { font-size: 10px; }
+
+.venue-card.vc-disabled {
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.7;
+}
+.venue-card.vc-disabled .vc-fdv { font-size: 18px; }
+
+.vc-legend { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }

@@ -1253,6 +1253,123 @@ function DerivationPanel({ asset, norm }) {
 }
 
 // ============================================================
+// VenueCards — at-a-glance grid comparing implied FDV / premium /
+// funding / vol across exchanges for the selected asset. Replaces
+// the heavy ValuationChart in the primary slot so the user can
+// scan venues without parsing a time series.
+// ============================================================
+function VenueCards({ asset, norm }) {
+  const refFdv = asset.lastRound.valuation;
+  const cons = norm.consensus;
+  const rows = [...norm.rows].sort((a, b) => b.impliedFDV - a.impliedFDV);
+  const disabled = (window.DISABLED || {})[asset.id] || [];
+
+  return (
+    <div className="panel venue-cards-panel">
+      <PanelHead
+        title="VENUES · LIVE COMPARISON"
+        sub={<>Implied FDV per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · funding (perp only)</>}
+        right={
+          <div className="vc-legend mono muted">
+            {rows.length} live · {disabled.length} disabled
+          </div>
+        }
+      />
+      <div className="venue-grid">
+        {rows.map((r) => {
+          const premRef = ((r.impliedFDV / refFdv) - 1) * 100;
+          const premCons = cons > 0 ? ((r.impliedFDV / cons) - 1) * 100 : 0;
+          const f = r.fundingRate; // decimal fraction (e.g. 0.0001)
+          const fPct = f != null ? f * 100 : null;
+          const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
+          return (
+            <div key={r.ex} className={"venue-card " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")}>
+              <div className="vc-head">
+                <div className="vc-head-l">
+                  <span className="vc-name">{r.ex}</span>
+                  <span className="vc-sub muted">{r.venue} · {meta.label}</span>
+                </div>
+                <span className={"struct-pill tone-" + meta.tone} title={meta.label}>{meta.sym}</span>
+              </div>
+
+              <div className="vc-fdv mono accent strong">
+                ${fmtUSD(r.impliedFDV)}
+              </div>
+              <div className={"vc-prem mono strong " + (premRef >= 0 ? "ok" : "bad")} title={`vs $${fmtUSD(refFdv)} (${asset.lastRound.date} round)`}>
+                {fmtPremium(premRef)}
+                <span className="vc-prem-l muted"> vs ref</span>
+              </div>
+
+              <div className="vc-row">
+                <span className="vc-row-k muted">Token</span>
+                <span className="vc-row-v mono">${fmtNum(r.tokenPrice)}</span>
+              </div>
+              {r.symbol && (
+                <div className="vc-row">
+                  <span className="vc-row-k muted">Ticker</span>
+                  <span className="vc-row-v mono vc-ticker" title="exchange symbol">{r.symbol}</span>
+                </div>
+              )}
+              <div className="vc-row">
+                <span className="vc-row-k muted">Vol 24h</span>
+                <span className="vc-row-v mono">${fmtUSD(r.vol24)}</span>
+              </div>
+              <div className="vc-row">
+                <span className="vc-row-k muted">Funding</span>
+                <span className={"vc-row-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
+                  {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
+                </span>
+              </div>
+              <div className="vc-row">
+                <span className="vc-row-k muted">vs Cons.</span>
+                <span className={"vc-row-v mono " + (premCons >= 0 ? "ok" : "bad")}>
+                  {cons > 0 ? fmtPct(premCons, 2) : "—"}
+                </span>
+              </div>
+
+              <div className="vc-foot">
+                <div className="confbar small" title={`confidence ${r.confidence}/100 · source: ${SRC_META[r.ratioSource]?.label || r.ratioSource}`}>
+                  <div className={"confbar-fill " + confClass(r.confidence)} style={{ width: r.confidence + "%" }} />
+                </div>
+                <span className="mono vc-conf muted">{r.confidence}</span>
+                <TickAge tickAt={r.tickAt} />
+              </div>
+            </div>
+          );
+        })}
+
+        {disabled.map((d) => {
+          const meta = STRUCT_META[d.structure] || { sym: "?", tone: "neutral", label: d.structure };
+          return (
+            <div key={"dis-" + d.ex} className="venue-card vc-disabled">
+              <div className="vc-head">
+                <div className="vc-head-l">
+                  <span className="vc-name muted">{d.ex}</span>
+                  <span className="vc-sub muted">{d.venue || "?"} · {meta.label}</span>
+                </div>
+                <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
+              </div>
+              <div className="vc-fdv mono muted">—</div>
+              <div className="vc-prem muted">disabled</div>
+              {d.symbol && (
+                <div className="vc-row">
+                  <span className="vc-row-k muted">Ticker</span>
+                  <span className="vc-row-v mono vc-ticker muted">{d.symbol}</span>
+                </div>
+              )}
+              <div className="vc-row">
+                <span className="vc-row-k muted">Reason</span>
+                <span className="vc-row-v mono muted vc-reason" title={d.reason}>{d.reason}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // Alert toast stack — listens to "pre-ipo:alert" CustomEvents
 // ============================================================
 function AlertToasts() {
@@ -1436,17 +1553,16 @@ function App() {
         <main className="main" data-screen-label="01 Valuation Dashboard">
           <AssetHeader asset={asset} norm={norm}/>
           <KPIStrip asset={asset} norm={norm}/>
+          <VenueCards asset={asset} norm={norm}/>
           <div className="grid-2">
-            <ValuationChart asset={asset} listings={listings} series={series} norm={norm}/>
+            <PremiumBars norm={norm}/>
             <DerivationPanel asset={asset} norm={norm}/>
           </div>
           <HedgeBook assetId={selectedId} norm={norm}/>
-          <div className="grid-2">
-            <FundingPanel assetId={selectedId} listings={listings}/>
-            <PremiumBars norm={norm}/>
-          </div>
+          <FundingPanel assetId={selectedId} listings={listings}/>
           <NormTable asset={asset} norm={norm} onFdvShares={(v)=>setOverrideShares(s=>({...s, [selectedId]: v}))}/>
           <StructureBreakdown norm={norm}/>
+          <ValuationChart asset={asset} listings={listings} series={series} norm={norm}/>
           <FootBar/>
         </main>
       </div>
