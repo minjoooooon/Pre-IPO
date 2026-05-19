@@ -1194,6 +1194,19 @@ body {
   text-transform: uppercase;
   margin-top: 2px;
 }
+/* The exchange-canonical ticker on its own line under venue + structure.
+ * Sits in the header so the user can immediately see WHAT each card is
+ * pricing (e.g. PRESPAXUSDT vs SPCX_USDT vs vntl:SPACEX), since different
+ * exchanges use different symbols and pair conventions for the same asset. */
+.vc-symbol {
+  font-size: 10.5px;
+  letter-spacing: 0;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
 /* The headline value: implied FDV, large and primary. */
 .vc-main {

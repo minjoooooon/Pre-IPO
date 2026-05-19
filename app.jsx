@@ -1297,12 +1297,19 @@ function VenueCards({ asset, norm }) {
                 <div className="vc-head-l">
                   <span className="vc-name">{r.ex}</span>
                   <span className="vc-sub muted">{meta.label} · {r.venue}</span>
+                  {r.symbol && (
+                    <span className="vc-symbol mono muted" title="exchange-canonical symbol">{r.symbol}</span>
+                  )}
                 </div>
                 <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
               </div>
 
               <div className="vc-main mono accent">${fmtUSD(r.impliedFDV)}</div>
 
+              <div className="vc-stat">
+                <span className="vc-stat-v mono">${fmtNum(r.tokenPrice)}</span>
+                <span className="vc-stat-k muted">가격</span>
+              </div>
               <div className="vc-stat">
                 <span className={"vc-stat-v mono " + (premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
                 <span className="vc-stat-k muted">변동</span>
