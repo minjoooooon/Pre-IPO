@@ -43,6 +43,20 @@
       "notes": "Republic-backed mirror credit (1:1 with post-IPO stock). Listed as SPOT on Bitget (probe 2026-05-18, not mix-futures). REST polling via /api/v2/spot/market/tickers?symbol=PRESPAXUSDT | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 preSPAX = 1 unit of SpaceX post-IPO stock performance (per Republic.com/rspax). ratio=1.0, source=official, confidence=70."
     },
     {
+      "asset_id": "SPACEX",
+      "exchange": "gate",
+      "symbol": "SPCX_USDT",
+      "venue": "CEX",
+      "structure": "pre-ipo-certificate",
+      "share_ratio": null,
+      "ratio_source": "uncalibrated",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-19T10:30:00Z",
+      "confidence": 0,
+      "doc_url": "https://www.gate.com/announcements/article/50724",
+      "notes": "[discover 2026-05-19] Gate pre-IPO certificate listing per announcement 50724. shares-per-token conversion not verified against an official product brief; live ticker capture not confirmed in this environment. Kept uncalibrated (ratio=null, confidence=0) until verifiable shares-per-token ratio and reference FDV can be sourced."
+    },
+    {
       "asset_id": "OPENAI",
       "exchange": "okx",
       "symbol": "OPENAI-USDT-SWAP",

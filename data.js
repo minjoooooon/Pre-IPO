@@ -8,11 +8,11 @@ window.ASSETS = [
     ticker: "SPX.PRE",
     name: "SpaceX",
     sector: "Aerospace / Space",
-    lastRound: { date: "2025-12", price: 185.00, valuation: 350e9 },
-    fdvShares: 1.89e9,
+    lastRound: { date: "2025-12", price: 421.00, valuation: 800e9 },
+    fdvShares: 11.87e9,
     consensusFDV: 612e9,
     delta24h: +2.34,
-    headline: "Starship V3 cadence ramp; Starlink IPO carve-out chatter"
+    headline: "Starship V3 cadence ramp; June 2026 IPO target $1.75T"
   },
   {
     id: "OPENAI",
