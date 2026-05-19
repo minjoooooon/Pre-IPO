@@ -48,13 +48,13 @@
       "symbol": "SPCX_USDT",
       "venue": "CEX",
       "structure": "pre-ipo-certificate",
-      "share_ratio": null,
-      "ratio_source": "uncalibrated",
-      "ratio_reference_fdv": null,
-      "ratio_calibrated_at": "2026-05-19T10:30:00Z",
-      "confidence": 0,
-      "doc_url": "https://www.gate.com/announcements/article/50724",
-      "notes": "[discover 2026-05-19] Gate pre-IPO certificate listing per announcement 50724. shares-per-token conversion not verified against an official product brief; live ticker capture not confirmed in this environment. Kept uncalibrated (ratio=null, confidence=0) until verifiable shares-per-token ratio and reference FDV can be sourced."
+      "share_ratio": 5.01,
+      "ratio_source": "back-solved",
+      "ratio_reference_fdv": 1400000000000.0,
+      "ratio_calibrated_at": "2026-05-20T02:00:00Z",
+      "confidence": 65,
+      "doc_url": "https://www.gate.com/learn/articles/what-is-spacex-spcx",
+      "notes": "[calibrated 2026-05-20] Gate Pre-IPOs SPCX is a Mirror Note / Contingent Payout Note (per Gate Learn). Subscription phase (2026-04-20 to 04-22): 1 SPCX = $590, total supply = 33,900 SPCX (raise ≈ $20.001M), Gate stated 'implying a valuation of approximately $1.4 trillion'. Distribution 2026-05-06 (100% unlock), 24/7 pre-market trade thereafter. Gate does not publish an explicit share count denominator, so the ratio is back-solved from the subscription anchor: implicit_basis = 1.4T / 590 ≈ 2.373B shares; share_ratio = fully_diluted_shares / implicit_basis = 11.87B / 2.373B ≈ 5.01. Sanity: at token P, our normalizer = (P/5.01) * 11.87B = P * 2.373B, which equals Gate's anchor at P=590 → $1.4T ✓. Live data: REST GET https://api.gateio.ws/api/v4/spot/tickers?currency_pair=SPCX_USDT (response is an array of {currency_pair, last, highest_bid, lowest_ask, quote_volume, base_volume, high_24h, low_24h, change_percentage}). Public WS available at wss://api.gateio.ws/ws/v4/ channel spot.tickers if polling becomes insufficient. Probe 2026-05-20: last=$789.23, vol24h=$697,735, change_24h=-3.14% → implied FDV ≈ $1.87T."
     },
     {
       "asset_id": "OPENAI",
