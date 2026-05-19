@@ -11,17 +11,21 @@ Background (2026-05-20 probe):
         - dex="vntl", fullName="Ventuals"   → coin "vntl:SPACEX"
             (private-company valuation perps: SPACEX, OPENAI, ANTHROPIC, ...)
 
-Live mids are fetched via:
-    POST /info {"type":"allMids","dex":"<dex>"}
-       → {"xyz:SPCX":"198.98", "xyz:TSLA":"...", ...}
+Live data is fetched via metaAndAssetCtxs (gives funding/OI/vol on top of
+mid price, exactly like core-perp ctx):
 
-The adapter parses market.symbol of the form "<dex>:<coin>" to know which
-dex/coin to pull. Symbol is the source of truth for routing — market.exchange
-is "hl-xyz" / "hl-vntl" for human-readable venue distinction only.
+    POST /info {"type":"metaAndAssetCtxs","dex":"<dex>"}
+       → [
+           {"universe":[{"name":"xyz:SPCX",...}, ...]},
+           [{"funding":"...", "openInterest":"...", "markPx":"...",
+             "midPx":"...", "oraclePx":"...", "dayNtlVlm":"...", ...}, ...]
+         ]
 
-No funding rate, no open interest exposed via allMids — spot-like polling.
-For asset-context (funding, oraclePx) we could call metaAndAssetCtxs per dex,
-but that's a P+1 optimization."""
+Universe and ctxs share the same index. The "name" field is fully qualified
+(includes the dex prefix), so we match market.symbol exactly.
+
+The adapter parses market.symbol of the form "<dex>:<coin>" to extract the
+dex; the full symbol is the lookup key in the universe."""
 
 from __future__ import annotations
 
@@ -88,9 +92,28 @@ class HyperliquidAdapter(ExchangeAdapter):
         self._reconnect_count = 0
         self._last_tick_at: float | None = None
 
+    async def _fetch_ctx(
+        self, client: httpx.AsyncClient, dex: str, coin_key: str
+    ) -> dict | None:
+        """One metaAndAssetCtxs call → the ctx dict matching coin_key, or None
+        if the coin isn't in that dex's universe right now."""
+        r = await client.post(
+            INFO_URL, json={"type": "metaAndAssetCtxs", "dex": dex}
+        )
+        r.raise_for_status()
+        data = r.json()
+        if not (isinstance(data, list) and len(data) >= 2):
+            return None
+        universe = data[0].get("universe", []) if isinstance(data[0], dict) else []
+        ctxs = data[1] if isinstance(data[1], list) else []
+        for i, u in enumerate(universe):
+            if isinstance(u, dict) and u.get("name") == coin_key:
+                if i < len(ctxs) and isinstance(ctxs[i], dict):
+                    return ctxs[i]
+                return None
+        return None
+
     async def discover(self, asset_id: str) -> DiscoverResult:
-        # Best-effort lookup against the symbol map; if the market is being
-        # added via admin path the caller supplies the symbol directly.
         guesses = [
             sym for (aid, _exch), sym in _ASSET_TO_HL_SYMBOL_BY_EXCHANGE.items()
             if aid == asset_id.upper()
@@ -101,7 +124,6 @@ class HyperliquidAdapter(ExchangeAdapter):
                 error=f"no Hyperliquid HIP-3 mapping for asset_id={asset_id}",
             )
 
-        # Try each guess; report the first that resolves.
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 for symbol in guesses:
@@ -109,18 +131,22 @@ class HyperliquidAdapter(ExchangeAdapter):
                     if not parsed:
                         continue
                     dex, coin_key = parsed
-                    r = await client.post(
-                        INFO_URL, json={"type": "allMids", "dex": dex}
+                    ctx = await self._fetch_ctx(client, dex, coin_key)
+                    if ctx is None:
+                        continue
+                    # Prefer markPx (the contract's mark) for the snapshot;
+                    # fall back to midPx then oraclePx.
+                    last_price = None
+                    for k in ("markPx", "midPx", "oraclePx"):
+                        last_price = _to_float(ctx.get(k))
+                        if last_price is not None:
+                            break
+                    return DiscoverResult(
+                        found=True,
+                        symbol=symbol,
+                        last_price=last_price,
+                        detail={"dex": dex, "coin_key": coin_key, "ctx_keys": list(ctx)},
                     )
-                    r.raise_for_status()
-                    mids = r.json()
-                    if isinstance(mids, dict) and coin_key in mids:
-                        return DiscoverResult(
-                            found=True,
-                            symbol=symbol,
-                            last_price=_to_float(mids[coin_key]),
-                            detail={"dex": dex, "coin_key": coin_key},
-                        )
         except Exception as e:  # noqa: BLE001
             return DiscoverResult(found=False, error=f"http error: {e!r}")
 
@@ -141,27 +167,34 @@ class HyperliquidAdapter(ExchangeAdapter):
         async with httpx.AsyncClient(timeout=10.0) as client:
             while True:
                 try:
-                    r = await client.post(
-                        INFO_URL, json={"type": "allMids", "dex": dex}
-                    )
-                    r.raise_for_status()
-                    mids = r.json()
-                    if not isinstance(mids, dict):
+                    ctx = await self._fetch_ctx(client, dex, coin_key)
+                    if ctx is None:
                         raise RuntimeError(
-                            f"unexpected mids shape: {type(mids).__name__}"
+                            f"coin {coin_key!r} not in dex {dex!r} universe"
                         )
-                    raw = mids.get(coin_key)
-                    if raw is None:
-                        raise RuntimeError(
-                            f"coin {coin_key!r} not in dex {dex!r} mids "
-                            f"(top keys: {list(mids)[:5]})"
-                        )
-                    last_price = _to_float(raw)
-                    if last_price is None:
-                        raise RuntimeError(f"mid for {coin_key} not a number: {raw!r}")
 
-                    # allMids is just the mid price — no bid/ask/vol/oi/funding.
-                    # Aggregator's spread_bp will fall back to 0; OI/funding stay None.
+                    # markPx is the canonical traded price for the perp.
+                    # midPx is also fine; oraclePx is the index, not a trade.
+                    last_price = None
+                    for k in ("markPx", "midPx", "oraclePx"):
+                        last_price = _to_float(ctx.get(k))
+                        if last_price is not None:
+                            break
+                    if last_price is None:
+                        raise RuntimeError(
+                            f"no usable price in ctx for {coin_key} "
+                            f"(keys: {list(ctx)})"
+                        )
+
+                    # Hyperliquid funding is per-hour (decimal fraction).
+                    # Other adapters report whatever cadence the venue uses;
+                    # the FE formats consistently per-period, so we don't
+                    # rescale here.
+                    funding = _to_float(ctx.get("funding"))
+                    oi = _to_float(ctx.get("openInterest"))
+                    # dayNtlVlm is USD-denominated 24h notional volume.
+                    vol24 = _to_float(ctx.get("dayNtlVlm"))
+
                     ts = time.time()
                     self._last_tick_at = ts
                     backoff = settings.reconnect_initial_seconds
@@ -170,9 +203,9 @@ class HyperliquidAdapter(ExchangeAdapter):
                         token_price=last_price,
                         bid=None,
                         ask=None,
-                        vol24=None,
-                        oi=None,
-                        funding_rate=None,
+                        vol24=vol24,
+                        oi=oi,
+                        funding_rate=funding,
                         timestamp=ts,
                     )
                     await asyncio.sleep(POLL_INTERVAL_SECONDS)

@@ -1279,8 +1279,13 @@ function VenueCards({ asset, norm }) {
         {rows.map((r) => {
           const premRef = ((r.impliedFDV / refFdv) - 1) * 100;
           const premCons = cons > 0 ? ((r.impliedFDV / cons) - 1) * 100 : 0;
+          const isPerp = r.structure === "perp";
           const fPct = r.fundingRate != null ? r.fundingRate * 100 : null;
           const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
+          // Perps are exchange-traded futures; spot/mirror/SPV are not.
+          // Show "(future)" next to the label so users immediately see which
+          // cards carry funding and which don't.
+          const kindSuffix = isPerp ? " (future)" : "";
           // Hover-only detail block. Avoids cluttering the at-a-glance card.
           const hoverTitle =
             `${r.ex} · ${r.symbol || ""}\n` +
@@ -1296,7 +1301,7 @@ function VenueCards({ asset, norm }) {
               <div className="vc-head">
                 <div className="vc-head-l">
                   <span className="vc-name">{r.ex}</span>
-                  <span className="vc-sub muted">{meta.label} · {r.venue}</span>
+                  <span className="vc-sub muted">{meta.label}{kindSuffix} · {r.venue}</span>
                   {r.symbol && (
                     <span className="vc-symbol mono muted" title="exchange-canonical symbol">{r.symbol}</span>
                   )}
@@ -1318,12 +1323,14 @@ function VenueCards({ asset, norm }) {
                 <span className="vc-stat-v mono">{r.vol24 ? "$" + fmtUSD(r.vol24) : "—"}</span>
                 <span className="vc-stat-k muted">거래량</span>
               </div>
-              <div className="vc-stat">
-                <span className={"vc-stat-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
-                  {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
-                </span>
-                <span className="vc-stat-k muted">펀비</span>
-              </div>
+              {isPerp && (
+                <div className="vc-stat">
+                  <span className={"vc-stat-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
+                    {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
+                  </span>
+                  <span className="vc-stat-k muted">펀비</span>
+                </div>
+              )}
               <div className="vc-stat">
                 <span className={"vc-stat-v mono " + (premCons >= 0 ? "ok" : "bad")}>
                   {cons > 0 ? fmtPct(premCons, 2) : "—"}
