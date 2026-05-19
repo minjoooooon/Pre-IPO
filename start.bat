@@ -1,32 +1,35 @@
 @echo off
-title Pre-IPO Normalizer
+REM ----------------------------------------------------------------
+REM Pre-IPO Normalizer launcher (silent / hidden console)
+REM
+REM   Double-click runs the backend with NO visible console window.
+REM   Browser opens http://127.0.0.1:8000/ after ~3s.
+REM   Use stop.bat (or close in Task Manager) to shut down.
+REM
+REM   Why PowerShell + Start-Process instead of pythonw:
+REM     pythonw.exe sets sys.stdout / sys.stderr to None on Windows.
+REM     The backend installs a logging.StreamHandler() (stderr by
+REM     default) — emitting against a None stream raises AttributeError
+REM     and kills the process at the first log call. Running python.exe
+REM     inside a hidden window keeps stdout/stderr alive (just invisible)
+REM     so logging works exactly like the visible mode.
+REM
+REM   Logs still go to backend/logs/app.log (RotatingFileHandler),
+REM   so the auto-generated ADMIN_TOKEN can be retrieved from there:
+REM     Get-Content backend\logs\app.log | Select-String admin_token
+REM ----------------------------------------------------------------
 
-REM ----------------------------------------------------------------
 REM Optional: pin a fixed admin token across restarts.
-REM   - Leave commented to use the random token generated each boot
-REM     (printed in the startup log as "admin_token token=...").
-REM   - Uncomment + edit the line below to fix it. This file is in
-REM     .gitignore-safe territory (root-level .bat is not tracked
-REM     unless explicitly added), but treat the token as a secret.
-REM ----------------------------------------------------------------
 REM set ADMIN_TOKEN=replace-me-with-your-secret
 
-cd /d "%~dp0backend"
+REM Hidden launch. -WindowStyle Hidden hides this PowerShell stub;
+REM Start-Process -WindowStyle Hidden hides the python window itself.
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath python -ArgumentList '-m','app.main' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden"
 
-echo ===========================================
-echo   Pre-IPO Normalizer
-echo   URL:   http://127.0.0.1:8000/
-echo   Quit:  Ctrl+C  (or close this window)
-echo ===========================================
-echo.
+REM Open the dashboard after uvicorn has time to bind :8000.
+REM /B keeps no extra window; the cmd subshell self-exits after starting the URL.
+start "" /B cmd /c "timeout /t 3 /nobreak >nul & start http://127.0.0.1:8000/"
 
-REM Open the dashboard in the default browser after a short delay so
-REM uvicorn has time to bind :8000. /b keeps it in the background so
-REM this window stays focused on the server log.
-start /b "" cmd /c "timeout /t 3 /nobreak >nul ^&^& start http://127.0.0.1:8000/"
-
-python -m app.main
-
-echo.
-echo (Server stopped. Press any key to close this window.)
-pause >nul
+REM This .bat exits immediately so its own console flashes for <0.5s
+REM and disappears. The backend keeps running as a detached process.
+exit /B 0
