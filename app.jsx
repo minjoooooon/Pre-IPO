@@ -776,6 +776,9 @@ function NormTable({ asset, norm, onFdvShares }) {
                     <div className="venue-cell">
                       <span className="venue-name">{r.ex}</span>
                       <span className="venue-type">{r.venue}</span>
+                      {r.symbol && (
+                        <span className="venue-ticker mono muted" title="exchange-canonical symbol">{r.symbol}</span>
+                      )}
                       <TickAge tickAt={r.tickAt}/>
                     </div>
                   </td>
@@ -846,6 +849,9 @@ function NormTable({ asset, norm, onFdvShares }) {
                   <div className="venue-cell">
                     <span className="venue-name muted">{d.ex}</span>
                     <span className="venue-type muted">{d.venue || "?"}</span>
+                    {d.symbol && (
+                      <span className="venue-ticker mono muted" title="exchange-canonical symbol">{d.symbol}</span>
+                    )}
                   </div>
                 </td>
                 <td className="l">

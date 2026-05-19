@@ -81,6 +81,7 @@
     }
     return {
       ex: market.exchange,
+      symbol: market.symbol || null,
       venue: market.venue || "CEX",
       structure: structureFromMarket(market),
       ratioSource: ratioSourceFromMarket(market),
