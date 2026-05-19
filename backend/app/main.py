@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .adapters.bitget import BitgetAdapter
+from .adapters.gate import GateAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
 from .adapters.okx import OkxAdapter
 from .aggregator import Aggregator
@@ -61,6 +62,7 @@ _ADAPTER_CLASSES = {
     "hyperliquid": HyperliquidAdapter,
     "okx": OkxAdapter,
     "bitget": BitgetAdapter,
+    "gate": GateAdapter,
 }
 
 
