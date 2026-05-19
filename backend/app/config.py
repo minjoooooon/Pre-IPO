@@ -1,11 +1,37 @@
+import os
+import secrets
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Settings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
+
+    # /api/admin/* is gated behind an X-Admin-Token header. The default is
+    # taken from the ADMIN_TOKEN env var; if unset, a random token is
+    # generated at import time and logged at startup so the operator can
+    # paste it into the FE. Without this, any browser tab in the user's
+    # session can POST and corrupt share_ratio (CORS allow_origins=*).
+    admin_token: str = Field(
+        default_factory=lambda: os.environ.get("ADMIN_TOKEN") or secrets.token_urlsafe(24)
+    )
+
+    # CORS allow-list. Default covers the prototype served by FastAPI on :8000,
+    # the legacy static :8080 dev server, and a file:// origin (which sends the
+    # literal string "null"). Anything else gets refused at the preflight stage
+    # so a malicious browser tab can't reach /api/admin/* even before the token
+    # check runs.
+    cors_allow_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "null",
+        ]
+    )
 
     # paths
     base_dir: Path = Path(__file__).resolve().parent.parent

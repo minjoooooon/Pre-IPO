@@ -12,7 +12,7 @@
       "ratio_calibrated_at": null,
       "confidence": 0,
       "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions",
-      "notes": "SPCX not in core perp universe (probe 2026-05-18). Available only via Trade.xyz HIP-3 builder-deployed market; routing requires deployer-specific endpoints not yet implemented. | [discover 2026-05-18] discover failed: SPCX not in core perp universe (size=230); likely HIP-3 builder-deployed, routing not yet implemented"
+      "notes": "[discover 2026-05-18] SPCX not in core perp universe (size=230); available only via Trade.xyz HIP-3 builder-deployed market; routing requires deployer-specific endpoints not yet implemented."
     },
     {
       "asset_id": "SPACEX",
@@ -26,7 +26,7 @@
       "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
       "confidence": 40,
       "doc_url": "https://www.okx.com/docs-v5/en/",
-      "notes": "[calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 — literal interpretation = 1 contract represents 1 SpaceX share unit. No official OKX product brief found that explicitly states shares-per-contract; flagged market-fitted (confidence 40). User can override via /api/admin in P7. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $800B from assets.json last_round.valuation. Override via /api/admin if needed."
+      "notes": "[calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=SPACEX, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. No official OKX product brief explicitly states shares-per-contract; flagged market-fitted (confidence 40). Reference FDV anchor: $800B from assets.json last_round.valuation. Override via /api/admin if needed."
     },
     {
       "asset_id": "SPACEX",
@@ -40,7 +40,7 @@
       "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
       "confidence": 70,
       "doc_url": "https://www.bitget.com/blog/articles/bitget-ipo-prime-prespax-subscription-launch",
-      "notes": "Republic-backed mirror credit (1:1 with post-IPO stock). Listed as SPOT on Bitget (probe 2026-05-18, not mix-futures). REST polling via /api/v2/spot/market/tickers?symbol=PRESPAXUSDT | [calibrated 2026-05-18] Republic mirror-credit structure: 1 preSPAX = 1 unit of SpaceX post-IPO stock performance (per Republic.com/rspax). Bitget IPO Prime issued via Republic with same 1:1 economic exposure. ratio=1.0, source=official, confidence=70. | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 token = 1 unit of SPACEX post-IPO stock performance. ratio=1.0, source=official, confidence=70."
+      "notes": "Republic-backed mirror credit (1:1 with post-IPO stock). Listed as SPOT on Bitget (probe 2026-05-18, not mix-futures). REST polling via /api/v2/spot/market/tickers?symbol=PRESPAXUSDT | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 preSPAX = 1 unit of SpaceX post-IPO stock performance (per Republic.com/rspax). ratio=1.0, source=official, confidence=70."
     },
     {
       "asset_id": "OPENAI",

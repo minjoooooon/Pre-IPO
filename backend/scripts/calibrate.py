@@ -43,6 +43,20 @@ from app.adapters.bitget import BitgetAdapter  # noqa: E402
 from app.adapters.hyperliquid import HyperliquidAdapter  # noqa: E402
 from app.adapters.okx import OkxAdapter  # noqa: E402
 from app.config import settings  # noqa: E402
+from app.registry import safe_write_json  # noqa: E402
+
+
+def _strip_audit_segments(notes: str | None, *prefixes: str) -> str:
+    """Remove pipe-separated audit segments whose body starts with any of
+    `prefixes` (e.g. "[calibrated ", "[discover "). Used so a re-run of the
+    calibration script replaces prior audit entries instead of appending
+    indefinitely (markets.json already showed three duplicate "[calibrated
+    2026-05-18]" entries before this fix landed)."""
+    if not notes:
+        return ""
+    parts = [p.strip() for p in notes.split("|")]
+    kept = [p for p in parts if p and not any(p.startswith(prefix) for prefix in prefixes)]
+    return " | ".join(kept)
 
 
 @dataclass
@@ -195,7 +209,9 @@ async def run() -> int:
         print(f"  decision: ratio={decision.share_ratio}  source={decision.ratio_source}  conf={decision.confidence}")
         print(f"  rationale: {decision.rationale}")
 
-    # Write back
+    # Write back. Strip any prior `[calibrated ...]` / `[discover ...]`
+    # segments before appending the new one so a re-run replaces rather than
+    # accumulates (note bloat was visible in markets.json before this fix).
     now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     for m in doc["markets"]:
         for d in decisions:
@@ -206,23 +222,18 @@ async def run() -> int:
                     m["ratio_reference_fdv"] = d.ratio_reference_fdv
                     m["ratio_calibrated_at"] = now_iso
                     m["confidence"] = d.confidence
-                    # preserve existing notes; append rationale stub
-                    existing = (m.get("notes") or "").strip()
+                    cleaned = _strip_audit_segments(m.get("notes"), "[calibrated ", "[discover ")
                     addendum = f"[calibrated {now_iso[:10]}] {d.rationale}"
-                    m["notes"] = f"{existing} | {addendum}" if existing else addendum
+                    m["notes"] = f"{cleaned} | {addendum}" if cleaned else addendum
                 else:
-                    # leave uncalibrated, just record discover outcome in notes
-                    existing = (m.get("notes") or "").strip()
+                    cleaned = _strip_audit_segments(m.get("notes"), "[calibrated ", "[discover ")
                     addendum = f"[discover {now_iso[:10]}] {d.rationale}"
-                    if addendum not in existing:
-                        m["notes"] = f"{existing} | {addendum}" if existing else addendum
+                    m["notes"] = f"{cleaned} | {addendum}" if cleaned else addendum
                 break
 
-    tmp = markets_path.with_suffix(".json.tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    tmp.replace(markets_path)
+    # Use the same fsync + Windows-retry helper as the registry. Eliminates
+    # the second atomicity story this codebase used to have.
+    safe_write_json(markets_path, doc)
     print(f"\nWrote {markets_path}")
 
     # Summary

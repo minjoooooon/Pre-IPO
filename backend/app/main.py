@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
@@ -67,6 +68,12 @@ _ADAPTER_CLASSES = {
 async def lifespan(app: FastAPI):
     _configure_logging()
     log.info("startup", host=settings.host, port=settings.port, db=str(settings.db_path))
+    # Log the active admin token once at startup so the operator can copy it
+    # into the FE prompt. If the operator set ADMIN_TOKEN explicitly, this
+    # just confirms it; if not, this is the only place to retrieve the
+    # auto-generated value.
+    admin_token_source = "env" if os.environ.get("ADMIN_TOKEN") else "generated"
+    log.info("admin_token", source=admin_token_source, token=settings.admin_token)
 
     registry = get_registry()
     log.info(
@@ -123,12 +130,14 @@ def create_app() -> FastAPI:
         description="Real-time synthetic pre-market valuation normalizer.",
         lifespan=lifespan,
     )
-    # Permissive CORS for local dev (prototype served from :8080, file://, or
-    # FastAPI :8000). P11 single-process deploy makes same-origin the default.
+    # Restricted CORS. The earlier `allow_origins=["*"]` let any browser tab
+    # preflight /api/admin/* and (combined with a leaked token) corrupt
+    # share_ratio. Allow-list is sourced from settings so the operator can
+    # extend it without code edits.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
+        allow_origins=settings.cors_allow_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
     app.include_router(health_api.router)

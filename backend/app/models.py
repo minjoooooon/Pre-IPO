@@ -17,6 +17,12 @@ class LastRound(BaseModel):
 
 
 class Asset(BaseModel):
+    # `extra="allow"` so on-disk fields the schema hasn't formalized yet
+    # (e.g. future `cik`, `dba`, custom audit columns) survive a round-trip
+    # through the registry instead of being silently dropped on the next
+    # admin save.
+    model_config = ConfigDict(extra="allow")
+
     id: str
     ticker: str
     name: str
@@ -32,6 +38,9 @@ class Asset(BaseModel):
 
 
 class Market(BaseModel):
+    # See Asset.model_config — same rationale for forward-compat extras.
+    model_config = ConfigDict(extra="allow")
+
     asset_id: str
     exchange: str
     symbol: str
