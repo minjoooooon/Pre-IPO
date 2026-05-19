@@ -34,13 +34,13 @@
       "symbol": "PRESPAXUSDT",
       "venue": "CEX",
       "structure": "mirror-credit",
-      "share_ratio": 1.0,
-      "ratio_source": "official",
-      "ratio_reference_fdv": null,
-      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
-      "confidence": 70,
-      "doc_url": "https://www.bitget.com/blog/articles/bitget-ipo-prime-prespax-subscription-launch",
-      "notes": "Republic-backed mirror credit (1:1 with post-IPO stock). Listed as SPOT on Bitget (probe 2026-05-18, not mix-futures). REST polling via /api/v2/spot/market/tickers?symbol=PRESPAXUSDT | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 preSPAX = 1 unit of SpaceX post-IPO stock performance (per Republic.com/rspax). ratio=1.0, source=official, confidence=70."
+      "share_ratio": 5.14,
+      "ratio_source": "back-solved",
+      "ratio_reference_fdv": 1500000000000.0,
+      "ratio_calibrated_at": "2026-05-20T03:00:00Z",
+      "confidence": 65,
+      "doc_url": "https://www.bitget.com/academy/bitget-first-ipo-prime-spacex-ipo-valuation-starlink-growth-analysis",
+      "notes": "[recalibrated 2026-05-20] Bitget IPO Prime preSPAX subscription published 1 preSPAX = $650, total supply 94,000, 'implying SpaceX valuation $1.5T' (sale 14,435 participants / $177M / 3x oversubscribed). Republic is the regulated issuer; preSPAX 'tracks economic performance of SpaceX post-IPO' — the 1:1 with public stock applies AT/AFTER conversion, NOT to the pre-IPO mirror price. Bitget does not publish an explicit share-count denominator; back-solve from subscription anchor: implicit_basis = 1.5T / 650 ≈ 2.308B; share_ratio = fully_diluted_shares / implicit_basis = 11.87B / 2.308B ≈ 5.14. Sanity: at P=$650 → implied_FDV = (650/5.14)*11.87B ≈ $1.501T ✓. Live: REST GET https://api.bitget.com/api/v2/spot/market/tickers?symbol=PRESPAXUSDT. Probe 2026-05-20: last=$818.27, 24h change=-2.01%, vol24h(USDT)=$541,618 → implied FDV ≈ $1.89T (cross-checks against Gate $1.87T to within ~1%). Trigger for recalibration: when SpaceX files S-1 or IPO completes, Republic mirror converts 1:1 to actual public shares — bump share_ratio to fully_diluted_shares / actual_post-IPO_share_count and refresh ratio_calibrated_at."
     },
     {
       "asset_id": "SPACEX",
