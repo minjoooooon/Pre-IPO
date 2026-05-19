@@ -71,11 +71,12 @@ function TickAge({ tickAt }) {
 // structure / source visual mapping
 // ============================================================
 const STRUCT_META = {
-  "SPV-backed":     { sym: "S", tone: "good",    label: "SPV-backed" },
-  "SPV-mirror":     { sym: "S", tone: "good",    label: "SPV-mirror" },
-  "synthetic":      { sym: "Y", tone: "neutral", label: "Synthetic" },
-  "mirror-credit":  { sym: "M", tone: "neutral", label: "Mirror credit" },
-  "perp":           { sym: "P", tone: "warn",    label: "Perp" }
+  "SPV-backed":         { sym: "S", tone: "good",    label: "SPV-backed" },
+  "SPV-mirror":         { sym: "S", tone: "good",    label: "SPV-mirror" },
+  "synthetic":          { sym: "Y", tone: "neutral", label: "Synthetic" },
+  "mirror-credit":      { sym: "M", tone: "neutral", label: "Mirror credit" },
+  "perp":               { sym: "P", tone: "warn",    label: "Perp" },
+  "pre-ipo-certificate":{ sym: "C", tone: "neutral", label: "Pre-IPO certificate" }
 };
 const SRC_META = {
   "official":      { dot: "good",    label: "Official" },
