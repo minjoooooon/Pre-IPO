@@ -81,6 +81,18 @@ ok(/RECONNECTING/.test(AJ), 'F62: ConnStatusCell shows RECONNECTING label');
 ok(/dead\.onmessage = null/.test(DL), 'F63: onclose nulls dead ws onmessage');
 ok(/dead\.onclose = null/.test(DL), 'F63: onclose nulls dead ws onclose');
 
+// FILTER — Spot/Perp filter (Rebatify-inspired addition)
+ok(/function structIsPerp/.test(AJ), 'FILTER: structIsPerp helper exists');
+ok(/function applyStructFilter/.test(AJ), 'FILTER: applyStructFilter helper exists');
+ok(/function countByFilter/.test(AJ), 'FILTER: countByFilter helper exists');
+ok(/function StructFilter/.test(AJ), 'FILTER: StructFilter component exists');
+ok(/const \[structFilter, setStructFilter\] = useState\("all"\)/.test(AJ), 'FILTER: App state initialized to "all"');
+ok(/structFilter=\{structFilter\}/.test(AJ), 'FILTER: structFilter prop threaded to children');
+ok(/onStructFilterChange=\{setStructFilter\}/.test(AJ), 'FILTER: setStructFilter callback threaded');
+ok(/applyStructFilter\(norm\.rows/.test(AJ), 'FILTER: NormTable applies filter to live rows');
+ok(/applyStructFilter\(allDisabled/.test(AJ), 'FILTER: disabled rows respect filter too');
+ok(/applyStructFilter\(allRows/.test(AJ), 'FILTER: VenueCards applies filter to live rows');
+
 // ---- Parse check via babel-standalone ----
 try {
   const out = babel.transform(AJ, { presets: ['env', 'react'] });
@@ -190,6 +202,31 @@ ok(stored.length === 1 && stored[0].id === 'good', 'SIM: loadAlerts self-heals l
 _storage['preIpoAlerts'] = JSON.stringify({});
 const empty = live.loadAlerts();
 ok(Array.isArray(empty) && empty.length === 0, 'SIM: loadAlerts returns [] for non-array storage');
+
+// FILTER functional sim — extract the helpers by regex and eval them.
+// Tests the LOGIC of structIsPerp / applyStructFilter / countByFilter
+// against the actual source in app.jsx.
+const helperBlockMatch = AJ.match(/function structIsPerp[\s\S]*?function countByFilter[\s\S]*?\n\}/);
+ok(helperBlockMatch != null, 'FILTER SIM: helpers block extracted from app.jsx');
+if (helperBlockMatch) {
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(helperBlockMatch[0] + '\nreturn { structIsPerp, applyStructFilter, countByFilter };');
+  const F = factory();
+  const rows = [
+    { ex: 'okx', structure: 'perp' },
+    { ex: 'bitget', structure: 'mirror-credit' },
+    { ex: 'gate', structure: 'pre-ipo-certificate' },
+    { ex: 'hl-vntl', structure: 'perp' },
+    { ex: 'future', structure: 'tokenized-equity' }, // unknown -> spot
+  ];
+  const c = F.countByFilter(rows);
+  ok(c.all === 5 && c.perp === 2 && c.spot === 3, `FILTER SIM: countByFilter = ${JSON.stringify(c)}`);
+  ok(F.applyStructFilter(rows, 'all').length === 5, 'FILTER SIM: filter "all" returns all rows');
+  ok(F.applyStructFilter(rows, 'perp').length === 2, 'FILTER SIM: filter "perp" returns 2 rows');
+  ok(F.applyStructFilter(rows, 'spot').length === 3, 'FILTER SIM: filter "spot" returns 3 (incl unknown structure)');
+  ok(!F.structIsPerp('mirror-credit'), 'FILTER SIM: structIsPerp(mirror-credit) === false');
+  ok(F.structIsPerp('perp'), 'FILTER SIM: structIsPerp(perp) === true');
+}
 
 if (failed > 0) {
   console.error(`\n${failed} TEST(S) FAILED`);

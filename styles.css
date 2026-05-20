@@ -1254,3 +1254,18 @@ body {
 .vc-ticker { font-size: 11px; }
 
 .vc-legend { font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* Spot/Perp filter chips reuse the .tab style for consistency with the
+   ValuationChart range picker. The wrappers below stack the chips next to
+   the existing right-side controls (legend on VenueCards, FDV editor on
+   NormTable) without breaking their layout. */
+.vc-head-right,
+.ntable-head-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.struct-filter .tab { display: inline-flex; align-items: center; gap: 4px; }
+.struct-filter .tab .muted { opacity: 0.65; }

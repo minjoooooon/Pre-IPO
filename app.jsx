@@ -100,6 +100,25 @@ function getSrcMeta(s) {
   return SRC_META[s] || { dot: "neutral", label: s || "unknown" };
 }
 
+// Spot/Perp split: perp instruments carry funding + liquidation risk;
+// everything else (SPV-backed, SPV-mirror, synthetic, mirror-credit,
+// pre-ipo-certificate) is "spot-like" — no funding leg, principal at risk
+// to issuer credit instead. Unknown future structures default to spot so
+// they don't accidentally hide.
+function structIsPerp(structure) {
+  return structure === "perp";
+}
+function applyStructFilter(rows, filter) {
+  if (filter === "all" || !filter) return rows;
+  if (filter === "perp") return rows.filter((r) => structIsPerp(r.structure));
+  return rows.filter((r) => !structIsPerp(r.structure));
+}
+function countByFilter(rows) {
+  let perp = 0, spot = 0;
+  rows.forEach((r) => { if (structIsPerp(r.structure)) perp++; else spot++; });
+  return { all: rows.length, spot, perp };
+}
+
 // safePct: divide-only helper that returns null when the denominator is not
 // strictly positive or finite. fmtPremium / fmtPct already render "—" for
 // null inputs (via fmtPct → null check), so consumers can swap safePct in
@@ -238,6 +257,33 @@ function TopBar({ now, asset }) {
         </button>
       </div>
     </header>
+  );
+}
+
+function StructFilter({ value, onChange, counts }) {
+  // Reusable filter chip strip — ALL · SPOT · PERP. Renders the same `.tab`
+  // class as the ValuationChart range picker so the visual language is
+  // consistent. Counts include disabled rows so the operator can see at a
+  // glance how many spot/perp venues exist before flipping the filter.
+  const opts = [
+    { key: "all",  label: "ALL"  },
+    { key: "spot", label: "SPOT" },
+    { key: "perp", label: "PERP" },
+  ];
+  return (
+    <div className="panel-tabs struct-filter">
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          className={"tab" + (value === o.key ? " active" : "")}
+          onClick={() => onChange(o.key)}
+          title={`Show ${o.label.toLowerCase()} venues only`}
+        >
+          {o.label} <span className="muted">{counts[o.key]}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -783,9 +829,14 @@ async function postRatio(assetId, exchange, ratio, source, referenceFdv, confide
 // ============================================================
 // master normalization table
 // ============================================================
-function NormTable({ asset, norm, onFdvShares }) {
+function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFilterChange }) {
   const [savingShares, setSavingShares] = useState(false);
   const [sharesDraft, setSharesDraft] = useState((asset.fdvShares/1e9).toFixed(2));
+
+  const allDisabled = (window.DISABLED || {})[asset.id] || [];
+  const counts = countByFilter([...norm.rows, ...allDisabled]);
+  const filteredRows = applyStructFilter(norm.rows, structFilter);
+  const filteredDisabled = applyStructFilter(allDisabled, structFilter);
 
   // keep draft in sync when asset changes externally
   useEffect(() => {
@@ -856,7 +907,13 @@ function NormTable({ asset, norm, onFdvShares }) {
         title="NORMALIZATION MATRIX"
         sub={<>Implied share price = <span className="mono">token / ratio</span> · Implied FDV = <span className="mono">implied share × FDV shares</span></>}
         right={
-          <div className="fdv-editor">
+          <div className="ntable-head-right">
+            <StructFilter
+              value={structFilter}
+              onChange={onStructFilterChange || (() => {})}
+              counts={counts}
+            />
+            <div className="fdv-editor">
             <span className="muted">FDV SHARES</span>
             <input
               className="fdv-input mono"
@@ -881,6 +938,7 @@ function NormTable({ asset, norm, onFdvShares }) {
                 src↗
               </a>
             )}
+            </div>
           </div>
         }
       />
@@ -904,7 +962,7 @@ function NormTable({ asset, norm, onFdvShares }) {
             </tr>
           </thead>
           <tbody>
-            {[...norm.rows].sort((a,b)=>b.impliedFDV-a.impliedFDV).map((r,i)=> {
+            {[...filteredRows].sort((a,b)=>b.impliedFDV-a.impliedFDV).map((r,i)=> {
               const prem = safeRatioPct(r.impliedFDV, norm.consensus);
               const premRef = safeRatioPct(r.impliedFDV, asset.lastRound.valuation);
               return (
@@ -980,7 +1038,7 @@ function NormTable({ asset, norm, onFdvShares }) {
                 </tr>
               );
             })}
-            {((window.DISABLED || {})[asset.id] || []).map((d) => (
+            {filteredDisabled.map((d) => (
               <tr key={"dis-"+d.ex} className="ntable-row-disabled">
                 <td className="l">
                   <div className="venue-cell">
@@ -1405,11 +1463,16 @@ function DerivationPanel({ asset, norm }) {
 // the heavy ValuationChart in the primary slot so the user can
 // scan venues without parsing a time series.
 // ============================================================
-function VenueCards({ asset, norm }) {
+function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange }) {
   const refFdv = asset.lastRound.valuation;
   const cons = norm.consensus;
-  const rows = [...norm.rows].sort((a, b) => b.impliedFDV - a.impliedFDV);
-  const disabled = (window.DISABLED || {})[asset.id] || [];
+  const allRows = [...norm.rows].sort((a, b) => b.impliedFDV - a.impliedFDV);
+  const allDisabled = (window.DISABLED || {})[asset.id] || [];
+  // Counts for the filter chip are computed on the FULL set (live + disabled)
+  // so a SPOT filter still shows "PERP (3)" before flipping.
+  const counts = countByFilter([...allRows, ...allDisabled]);
+  const rows = applyStructFilter(allRows, structFilter);
+  const disabled = applyStructFilter(allDisabled, structFilter);
 
   return (
     <div className="panel venue-cards-panel">
@@ -1417,8 +1480,15 @@ function VenueCards({ asset, norm }) {
         title="VENUES · LIVE COMPARISON"
         sub={<>Implied FDV per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · funding (perp only)</>}
         right={
-          <div className="vc-legend mono muted">
-            {rows.length} live · {disabled.length} disabled
+          <div className="vc-head-right">
+            <StructFilter
+              value={structFilter}
+              onChange={onStructFilterChange || (() => {})}
+              counts={counts}
+            />
+            <div className="vc-legend mono muted">
+              {rows.length} live · {disabled.length} disabled
+            </div>
           </div>
         }
       />
@@ -1622,6 +1692,12 @@ function App() {
   const [selectedId, setSelectedId] = useState("SPACEX");
   const [now, setNow] = useState(new Date());
   const [overrideShares, setOverrideShares] = useState({});
+  // Structure filter applied to the per-venue lens panels (VenueCards +
+  // NormTable). Aggregate panels (KPIStrip, PremiumBars, HedgeBook,
+  // StructureBreakdown) intentionally stay at ALL — they're meant to
+  // show the cross-structure picture and would be misleading otherwise.
+  // 'all' | 'spot' | 'perp'.
+  const [structFilter, setStructFilter] = useState("all");
   // tickVersion is bumped by data-live.js via a custom DOM event. Acts as a
   // re-render trigger without rewriting useMemo data sources.
   const [tickVersion, setTickVersion] = useState(0);
@@ -1702,14 +1778,25 @@ function App() {
         <main className="main" data-screen-label="01 Valuation Dashboard">
           <AssetHeader asset={asset} norm={norm}/>
           <KPIStrip asset={asset} norm={norm}/>
-          <VenueCards asset={asset} norm={norm}/>
+          <VenueCards
+            asset={asset}
+            norm={norm}
+            structFilter={structFilter}
+            onStructFilterChange={setStructFilter}
+          />
           <div className="grid-2">
             <PremiumBars norm={norm}/>
             <DerivationPanel asset={asset} norm={norm}/>
           </div>
           <HedgeBook assetId={selectedId} norm={norm}/>
           <FundingPanel assetId={selectedId} listings={listings}/>
-          <NormTable asset={asset} norm={norm} onFdvShares={(v)=>setOverrideShares(s=>({...s, [selectedId]: v}))}/>
+          <NormTable
+            asset={asset}
+            norm={norm}
+            structFilter={structFilter}
+            onStructFilterChange={setStructFilter}
+            onFdvShares={(v)=>setOverrideShares(s=>({...s, [selectedId]: v}))}
+          />
           <StructureBreakdown norm={norm}/>
           <ValuationChart asset={asset} listings={listings} series={series} norm={norm}/>
           <FootBar/>
