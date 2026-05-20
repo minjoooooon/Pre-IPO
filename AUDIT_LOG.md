@@ -1,0 +1,251 @@
+# Autonomous Audit Log
+
+자리 비운 사이 점검 진행 상황. 슬라이스별 self-review (Claude sub-agent) + codex exec 병렬 → 합쳐서 픽스 → 검증 → 커밋.
+
+날짜: 2026-05-19 (KST)
+
+## Slices
+
+| # | Scope | Self-review | Codex | Synthesis | Fixes | Verify | Commit |
+|---|---|---|---|---|---|---|---|
+| 1 | adapters + supervisor + aggregator + normalizer + store | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+5 smoke | ✅ `1d488f2` |
+| 2 | registry + admin + calibrate + data files + models | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+11 smoke | ✅ `48daec8` |
+| 3 | rest/ws/health api + main + config + start/stop.bat | ✅ | ✅ | ✅ | ⏳ pending VPS | ⏳ pending | ⏳ pending |
+| 4 | data-live.js + app.jsx + HTML | — | — | — | — | — | — |
+
+## Slice 1 — data ingestion path
+
+**Self-review** (Claude sub-agent): 5 CRITICAL, 15 IMPORTANT, 14 MINOR new issues. Verdict: `acceptable-with-fixes`.
+**Codex review**: 1 CRITICAL, 9 IMPORTANT, 3 MINOR. Verdict: `unsafe`.
+
+### Overlap (both flagged)
+- OKX heartbeat silent exit → reader stuck on dead socket (Claude IMPORTANT okx.py:232, codex CRITICAL okx.py:226)
+- `cleanup_older_than` is dead code → unbounded DB growth (both CRITICAL)
+- normalizer divide-by-zero on `share_ratio == 0.0` (both CRITICAL)
+- `INSERT OR IGNORE` silently drops duplicate-ts rows (both IMPORTANT)
+- `_pending_flush` unbounded if SQLite keeps failing (both IMPORTANT)
+- OKX bid/ask flap to None on partial tickers frames (both IMPORTANT)
+- OKX `last or state.last_price` masks legitimate 0.0 (both IMPORTANT/MINOR)
+
+### Applied fixes
+| ID | File | Change |
+|---|---|---|
+| F1 | okx.py | clean WS close → backoff (not hot-spin reconnect) |
+| F2 | supervisor.py | reset reconnect backoff on healthy tick |
+| F3 | aggregator.py + config.py | schedule `cleanup_older_than` every 6h via `_retention_loop` |
+| F4 | normalizer.py | guard `share_ratio` falsy / non-finite |
+| F5 | okx.py | heartbeat send failure closes WS (forces reconnect) |
+| F6 | store.py | `asyncio.Lock` around all writes; cursor-based rowcount; coerce db_path to str |
+| F7 | aggregator.py + config.py | bound `_pending_flush` with `pending_flush_max` (drop-oldest on overflow) |
+| F8 | okx.py | bid/ask only overwrite when parsed value is not None |
+| F9 | okx.py | `last` only overwrite when not None (drops `or`-falsy bug) |
+| F10 | okx.py | reset `_ChannelState` per `_connect_once` |
+| F11 | okx.py | `_to_float` rejects NaN/Inf |
+| F12 | okx.py | raise on `event=="error"` (subscribe rejection) instead of silently idling |
+| F13 | normalizer.py | replace hardcoded 60s with `settings.stale_threshold_seconds` |
+| F14 | supervisor.py | preserve `last_error` across status resets |
+| F15 | supervisor.py | track `connected_at`; never-ticked adapter can go stale |
+| F16 | aggregator.py + config.py | first flush after `tick_batch_first_flush_seconds` (5s) instead of full 60s |
+| F17 | supervisor.py | clean stream-return path: backoff + state="reconnecting", separate log event |
+| F18 | okx.py | use `settings.okx_heartbeat_interval_seconds` (20s per OKX spec) |
+| F19 | normalizer.py | future-skewed exchange ts → stale (rather than masquerading as fresh) |
+
+### Verification
+- `ruff check app` → All checks passed
+- `python -m compileall -q app` → clean
+- 5 smoke assertions (normalize share_ratio=0/NaN/future-ts/fresh + `_to_float('nan')==None`) → all pass
+
+### Deferred (MINOR — recorded for later)
+- bitget hardcoded `POLL_INTERVAL_SECONDS` → settings (slice 2 candidate)
+- bitget no `stats` property like OKX (observability slice)
+- `Aggregator._broadcast` declared async but never awaits
+- `_stale_loop` uses wall clock (`time.time()`) — NTP jumps could defer stale by N seconds
+- `snapshot_message` blocks event loop if 50 clients reconnect simultaneously
+- OKX `log.warning("okx_parse_error" ...)` not rate-limited under schema-drift flood
+- `websockets.connect(..., max_queue=...)` not set explicitly
+
+## Slice 2 — calibration & admin
+
+**Self-review** (Claude sub-agent): 5 CRITICAL, 14 IMPORTANT, 12 MINOR. Verdict: `acceptable-with-fixes`.
+**Codex review**: 2 CRITICAL, 11 IMPORTANT, 3 MINOR. Verdict: `unsafe`.
+
+### Overlap (both flagged)
+- Admin endpoints unauthenticated + `CORS allow_origins=*` → browser-tab can corrupt FDV (both CRITICAL)
+- `_atomic_write` lacks `fsync` + Windows-share-violation retry (both CRITICAL/MINOR)
+- calibrate.py note-append idempotency broken — markets.json already showed duplicates (both CRITICAL)
+- Pydantic `model_copy(update=...)` bypasses validation → bogus `ratio_source` lands on disk (both IMPORTANT)
+- `allow_inf_nan=False` missing on admin float fields (both IMPORTANT)
+- `ratio_source` body is free-form str instead of `RatioSource` literal (both IMPORTANT)
+- Asset/Market silently drop unknown on-disk fields on round-trip (both)
+- `registry.reload()` not all-or-nothing (codex IMPORTANT, addressed)
+- No FK validation Market.asset_id → Asset.id (codex IMPORTANT)
+
+### Applied fixes (slice 2)
+| ID | File | Change |
+|---|---|---|
+| F20 | config.py | `admin_token` (env or auto-generated) + `cors_allow_origins` allow-list |
+| F21 | main.py | CORS locked to allow-list; method allow-list narrowed; admin token logged at startup |
+| F22 | registry.py | `safe_write_json` helper: `flush+fsync+os.replace` w/ Windows-retry backoff |
+| F23 | calibrate.py | strip prior `[calibrated …]`/`[discover …]` segments before re-append; use `safe_write_json` |
+| F24 | models.py | `model_config = ConfigDict(extra="allow")` on Asset and Market |
+| F25 | registry.py | `update_asset_shares`/`update_market_ratio` re-validate via `model_validate`, not `model_copy` |
+| F26 | registry.py | `shares_last_updated` only advances when `fully_diluted_shares` actually changes; accept optional `source_url` |
+| F27 | registry.py | `reload()` all-or-nothing snapshot validation + FK check + duplicate-id check |
+| F28 | admin.py | `allow_inf_nan=False` on `fully_diluted_shares` / `share_ratio` / `ratio_reference_fdv` |
+| F29 | admin.py | `ratio_source` body typed as `RatioSource` literal (rejects "garbage" at parse time) |
+| F30 | admin.py | `Path` regex on `asset_id` / `exchange` (log-injection / path-traversal defence) |
+| F31 | admin.py | `max_length` on `source` (1024), `source_url` (2048) |
+| F32 | admin.py | `require_admin_token` dependency on router; 401 without `X-Admin-Token` |
+| F33 | admin.py | `broadcast_config_update` failure logged at warning (was silently `pass`) |
+| F34 | registry.py | `update_market_ratio` writes tz-aware UTC `datetime` (was naive) |
+| F35 | registry.py | `get_registry` lazy-init guarded by `threading.Lock` |
+| F36 | registry.py | use `model_dump(mode="json")` (no double round-trip via `model_dump_json`+`json.loads`) |
+| F37 | markets.json | one-shot cleanup of three rows with duplicated `[calibrated …]` segments |
+
+### Verification
+- `ruff check app scripts/calibrate.py` → All checks passed
+- `python -m compileall -q app scripts` → clean
+- 11 smoke assertions:
+  1. registry reload works (3 assets, 6 markets)
+  2. FK rejection — `asset_id=NONEXISTENT` raises
+  3. duplicate `market_id` raises
+  4. Asset preserves unknown `custom_field` through `model_validate` + `model_dump`
+  5–7. `UpdateRatioBody` rejects `Infinity`/`-Infinity`/`NaN` for `share_ratio`
+  8. `UpdateRatioBody` rejects `ratio_source="garbage"`
+  9. `UpdateSharesBody` rejects negative `fully_diluted_shares`
+  10. `safe_write_json` fsync + replace round-trip
+  11. `shares_last_updated` stays put when shares unchanged
+  12. `shares_last_updated` advances when shares change
+  13. `update_market_ratio` rejects bogus `ratio_source` at registry layer
+
+### Lessons (avoid in future slices)
+- **Smoke tests must not write to tracked data files.** The slice-2 smoke
+  called `update_asset_shares` against the real `assets.json` and partially
+  corrupted it (shares_last_updated jump + float reformatting). I restored
+  it via `git checkout`, but the smoke should have used a temp dir copy.
+  Pattern for slice 3/4 smokes: copy `data/*.json` to a `TemporaryDirectory`
+  and point a Registry at the copy.
+
+### Deferred (MINOR — recorded for later, do in slice 3+)
+- Supervisor doesn't re-evaluate adapter enablement after admin writes —
+  changing a market from `uncalibrated` → calibrated requires a process
+  restart to start the adapter. Document or add `supervisor.reconfigure()`.
+- Audit log: structured JSONL row per admin write (before/after, actor,
+  request-id) — currently only `ratio_calibrated_at` survives.
+- `LastRound.date` is `str` with no regex; allows malformed "2025"-only.
+- `Asset.reference_share_price` is stored on disk so an admin shares-edit
+  leaves it stale.
+
+## Slice 3 — API surface + process boot
+
+**Date:** 2026-05-20 (KST).
+**Status:** review complete, **fixes PENDING — to be applied on VPS in the next
+session.** This commit ships the slice-3 review only; the actual fixes will
+land in a follow-up commit once the dev host moves to VPS.
+
+This branch already carries an unrelated step-3 boot-logging fix (`main.py` +
+`start.bat`) that landed BEFORE the slice-3 review — the audit covers it, and
+two of its own weaknesses (logging file-handle leak + bootstrap.err dir
+assumption) are part of the fix queue below.
+
+### Reviewer verdicts
+- **Self-review** (Claude general-purpose sub-agent): 2 CRITICAL, 7 IMPORTANT, 11 MINOR. Verdict: `acceptable-with-fixes`.
+- **Codex review**: 0 CRITICAL, 7 IMPORTANT, 3 MINOR. Verdict: `acceptable-with-fixes`.
+
+Both reviewers converge on the same operational risk pattern: "the process
+looks healthy while degraded." `/health` returns 200 regardless of store /
+supervisor / aggregator state; WS clients can sit silently stale after a
+slow-subscriber drop; startup partial-failure does not fully unwind; admin
+tokens persist in the rotating log; the `start.bat` hidden window hides
+exactly the early failures the new logging fix was designed to surface.
+
+### Overlap findings (both flagged — fix priority)
+- `backend/app/api/rest.py:37-44` — `/api/history/{asset_id}?seconds=…` has no upper bound. Large positive `seconds` serializes hundreds of thousands of rows into a single JSON response. Negative values silently return empty (because `cutoff > now`). (both IMPORTANT)
+- `backend/app/api/ws.py:35-47` + `backend/app/aggregator.py:175-177` — slow-subscriber drop leaves `_sender` parked on a discarded queue forever; `_receiver` parked on `receive_text()`. WS connection stays "open" with zero data flowing until the client itself drops. (both IMPORTANT)
+- `backend/app/main.py:30-42` — `_configure_logging()` constructs `RotatingFileHandler(...)` BEFORE checking whether one already exists. The second call (from lifespan, after the new `__main__`-block call) leaks an open file handle to `app.log`. On Windows this can lock the file, breaking log rotation and conflicting with the new `Start-Process -RedirectStandardOutput` paths. Bug introduced by this session's step-3 change. (Claude IMPORTANT, codex MINOR)
+- `backend/app/api/health.py:6-11` — `/health` is a constant `{"status":"ok"}`, ignores DB, supervisor, aggregator. Same endpoint that monitoring will scrape. Sibling `/api/status` silently returns `[]` when `app.state.supervisor is None`, so neither endpoint actually reports startup failure. (both IMPORTANT)
+- `backend/app/main.py:117-128` — lifespan startup runs `aggregator.start()` then `supervisor.start()` then `ws_api.attach()` then `app.state.aggregator = …`. An exception between these leaves already-started components without cleanup; the `finally` block then tries to stop components that were never assigned. (both IMPORTANT)
+- `backend/app/main.py:85-86` — admin token logged at INFO into the rotating `app.log` with the raw token value. Documented as the recovery channel for the auto-generated token, but the same path also persists env-provided tokens. Log files rotate to backups, OneDrive/Dropbox sync, etc. (both IMPORTANT)
+- `start.bat:32` — `-RedirectStandardError '%~dp0backend\logs\bootstrap.err'` requires the parent dir to exist; `Start-Process` will fail silently if it does not. On a fresh checkout (or first deploy) the dir does not exist yet — `_configure_logging` creates it but only AFTER python starts, which it cannot if redirection fails. Bug introduced by this session's step-3 change. (Claude MINOR, codex IMPORTANT)
+- `backend/app/api/rest.py:17,25` — `asset_id` accepted as arbitrary unbounded string. Admin endpoints use `Path(pattern=...)`/`_ASSET_ID_REGEX` for the same identifier. Inconsistency. (both MINOR)
+- `stop.bat:6` — PID-detection race: between `netstat` snapshot and `taskkill /F`, the PID could be reused by an unrelated process. Hard-coded `:8000` couples to one port. (both MINOR)
+
+### Claude-unique findings
+- 🔴 **CRITICAL — `backend/app/main.py:114-115`** `supervisor.disable(market.exchange, ...)` calls into `Supervisor.disable()` (supervisor.py:52-60) which iterates ALL `_SupervisedAdapter` rows with matching `adapter.exchange_id`. With three OKX markets (SPACEX/OPENAI/ANTHROPIC) all sharing `exchange_id="okx"`, a single uncalibrated row at startup blackholes the entire OKX feed for the two correctly-calibrated assets. Same hazard for `bitget`, `gate`. **Compounded second bug found by manual verification:** `HyperliquidAdapter.exchange_id = "hyperliquid"` (adapters/hyperliquid.py:89) but the markets register under `exchange="hl-xyz"` and `exchange="hl-vntl"` — so `supervisor.disable("hl-xyz", ...)` matches no adapter and is a NO-OP. An uncalibrated hyperliquid market is NOT disabled, instead runs with `share_ratio=None` and either errors per tick or emits broken normalizations. Both bugs share one fix (F38-F39 below).
+- 🔴 **CRITICAL — `backend/app/api/ws.py:32-46`** `queue = await aggregator.subscribe()` raises (e.g., a `model_dump()` validation error inside `snapshot_message()`, or during aggregator shutdown) → control jumps to `finally:` at line 45 → `aggregator.unsubscribe(queue)` with `queue` unbound → `UnboundLocalError`. The original exception is masked, the client's WS is left half-open.
+- IMPORTANT — `backend/app/api/admin.py:52` admin token compared with `!=` rather than `hmac.compare_digest`. Timing oracle is theoretical on loopback but real-world once the service is exposed (VPS).
+- MINOR — `backend/app/main.py:163-181` static-file routes call `FileResponse(p)` without `p.resolve()` symlink-guard. An attacker who can write to project root could plant `app.jsx` as a symlink to `~/.ssh/id_rsa` etc.
+- MINOR — `backend/app/config.py:18` `os.environ.get("ADMIN_TOKEN") or secrets.token_urlsafe(24)` — falsy strings (`""`, `"0"`, `"false"`) fall through to random regeneration silently.
+- MINOR — `backend/app/main.py:209-210` `log_config=None` works on uvicorn 0.30-0.32 but the wider `>=0.30` constraint in `pyproject.toml` could break silently if upstream renames the `uvicorn.error` logger.
+
+### Codex-unique findings
+- 🟡 **IMPORTANT — `backend/app/api/ws.py:32`** `/ws` bypasses CORS entirely (CORS middleware does not apply to WebSocket upgrade). Any browser origin can connect, drain snapshots/status/history, and hold server resources. **Especially relevant for VPS** where the server is potentially reachable from the public internet rather than loopback only.
+- IMPORTANT — `backend/app/api/ws.py:64` inbound WebSocket frames are decoded with no app-level size/rate policy. A malicious local page can send arbitrarily large text frames. Set uvicorn `ws_max_size` explicitly.
+- MINOR — `backend/app/config.py:8` `Settings(BaseModel)` does not read env vars. Comments imply operator-adjustable CORS/host/port/paths, but only `ADMIN_TOKEN` is wired via the `default_factory` hack. Either rename to `pydantic-settings.BaseSettings` or document the limitation.
+
+### Planned fixes (PENDING — apply on VPS in next session)
+
+| ID | File(s) | Severity | Source | Change |
+|---|---|---|---|---|
+| F38 | backend/app/supervisor.py | CRITICAL | Claude | Change `disable(exchange, reason)` → `disable(market_id, reason)`; match on `sa.market.market_id` instead of `sa.adapter.exchange_id`. |
+| F39 | backend/app/main.py:114 | CRITICAL | Claude | Update call site: `supervisor.disable(market.market_id, "uncalibrated: ratio not set")`. Combined with F38 this fixes both the over-disable (OKX) and the no-op-disable (hyperliquid) bugs. |
+| F40 | backend/app/api/ws.py | CRITICAL | Claude | Initialize `queue: asyncio.Queue \| None = None` before the try; guard finally with `if queue is not None: aggregator.unsubscribe(queue)`. Wrap `await aggregator.subscribe()` in its own try so connection is closed cleanly on subscribe failure. |
+| F41 | backend/app/aggregator.py + ws.py | IMPORTANT | both | Slow-subscriber drop: in `_broadcast`, when discarding a queue, also `q.put_nowait(None)`. In `_sender`, treat `payload is None` as "close ws and exit". Eliminates the zombie WS failure mode. |
+| F42 | backend/app/api/ws.py | IMPORTANT | codex | Origin check before `ws.accept()`: read `ws.headers.get("origin")`, reject (`await ws.close(code=1008)`) if not in `settings.cors_allow_origins`. Critical for VPS exposure. |
+| F43 | backend/app/main.py | IMPORTANT | codex | Pass `ws_max_size=1 << 20` (1 MiB) to `uvicorn.run` to cap inbound WS frame size. |
+| F44 | backend/app/main.py:30-42 | IMPORTANT | both | Move `RotatingFileHandler(...)` construction INSIDE the existing handler-presence guard. Compare by `getattr(h, 'baseFilename', None)` to detect the same handler. Closes the step-3 file-handle leak. |
+| F45 | backend/app/api/rest.py:37-44 + store.py | IMPORTANT | both | Clamp `seconds = max(1, min(s, settings.history_replay_seconds))`. Add `LIMIT settings.history_max_rows` to `replay_recent`. Reject negative explicitly with 400. |
+| F46 | backend/app/api/rest.py:17,25 | MINOR | both | Constrain `asset_id` Query/Path with `pattern="^[A-Z0-9_-]{1,32}$"` matching admin's `_ASSET_ID_REGEX`. |
+| F47 | backend/app/api/health.py (new /readyz) | IMPORTANT | both | Split: `/livez` constant 200; `/readyz` checks `app.state.aggregator is not None and app.state.supervisor is not None and (any adapter with last_tick_at within stale_threshold_seconds)`. Return 503 otherwise. |
+| F48 | backend/app/main.py:74-129 | IMPORTANT | both | Wrap lifespan startup acquisitions in try/except; on exception, stop each component that was successfully initialized (`with contextlib.suppress(...)`), THEN re-raise. |
+| F49 | backend/app/main.py:85-86 + admin token writer | IMPORTANT | both | Log only `source=env/generated` at INFO. Write actual token to `backend/logs/admin_token.txt` (`os.chmod 0o600` on POSIX, ACL deny-others on Windows). Operator retrieves from the file, not the log. |
+| F50 | backend/app/api/admin.py:52 | IMPORTANT | Claude | Replace `x_admin_token != expected` with `hmac.compare_digest(x_admin_token, expected)` (keep the `not x_admin_token` short-circuit). |
+| F51 | start.bat:32 | IMPORTANT | codex | `if not exist "%~dp0backend\logs" mkdir "%~dp0backend\logs"` BEFORE the `powershell ... Start-Process` line. |
+
+**Deferred to slice 4 or later (MINOR — record but do not apply):**
+- `rest.py:20,42` — reflected `asset_id` in `HTTPException(detail=...)` (CR/LF could land in structured logs; minor).
+- `main.py:163-181` — `Path.resolve()` symlink rejection for static files (defence-in-depth; local-fs-write attacker has already won).
+- `main.py:148-151` — CORS `allow_methods` allow-list narrow (documentational only).
+- `main.py:209-210` — pin uvicorn range in `backend/pyproject.toml` (currently `>=0.30` — open-ended) to insulate from logger renames.
+- `config.py:18` — reject empty `ADMIN_TOKEN=""` rather than silently regenerating.
+- `config.py:8` — migrate `Settings` to `pydantic-settings.BaseSettings` so host/port/paths are actually env-configurable. Larger refactor — schedule after slice 4.
+- `admin.py` — wrap `pydantic.ValidationError` raised inside `registry.update_*` with `HTTPException(422)` to avoid leaking Pydantic class names through the default 500 handler.
+- `stop.bat` — replace netstat lookup with PID file written by `start.bat`. Race is real but low-probability on a single-operator host.
+- Linux service scripts (`start.sh`, `stop.sh` or a `systemd` unit) — REQUIRED on VPS before this service can run there. Track as a follow-up alongside slice-4 work.
+
+### Step-3 boot-logging change (included in this commit, pre-audit)
+
+This change is BEFORE the slice-3 audit fixes; it predates them and the audit
+caught two issues with it (F44 + F51). It is shipped here because the audit
+needed to review it, and because the bind-failure diagnosis it enables is
+genuinely useful on VPS too.
+
+- `backend/app/main.py` —
+  - `_configure_logging()` moved to the top of the `if __name__ == "__main__":` block, before `uvicorn.run`. Previously it ran inside `lifespan`, which fires AFTER uvicorn binds — so EADDRINUSE on :8000 left zero trace in `app.log`.
+  - The lifespan still calls `_configure_logging()` as an idempotent fallback for non-`__main__` entry points (e.g., `uvicorn app.main:app` directly). **The idempotency guard is broken — see F44.**
+  - `uvicorn.run(log_config=None, access_log=False)` so `uvicorn`, `uvicorn.error`, `uvicorn.access` loggers propagate to root, where the `RotatingFileHandler` catches them. `access_log=False` suppresses per-request lines (would flood app.log with FE polling traffic).
+- `start.bat` —
+  - `Start-Process` now also passes `-RedirectStandardError '%~dp0backend\logs\bootstrap.err'` and `-RedirectStandardOutput '%~dp0backend\logs\bootstrap.out'`. These capture pre-logging-configured failures (import errors, the brief window before `_configure_logging` runs in `__main__`). **Assumes the dir exists — see F51.**
+- **Verification:** triggered EADDRINUSE on :8000 with the existing backend (PID 2752 at the time) still running. A second `python -m app.main` exited cleanly and `ERROR uvicorn.error [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000)` was captured in `app.log`. Before the change, zero lines.
+
+### How to resume on VPS (next session)
+
+The full repo state needed to continue is on this branch
+(`chore/spacex-market-notes-2026-05-19`). Memory files are Windows-local and
+do not travel — this AUDIT_LOG section + the commit message are the
+authoritative resume pointer.
+
+1. **Pull**: `git checkout chore/spacex-market-notes-2026-05-19 && git pull`.
+2. **Install**: re-create venv from `backend/pyproject.toml` (Python 3.12; deps: `fastapi`, `uvicorn`, `structlog`, `httpx`, `websockets`, `pydantic`, `aiosqlite`). Note: `pyproject.toml` constrains uvicorn `>=0.30` which is wide-open; pin if you hit a regression.
+3. **Boot scripts**: `start.bat`/`stop.bat` are Windows-only and WILL NOT work on Linux. For now run directly: `cd backend && python -m app.main`. Add `start.sh` + `stop.sh` (or a `systemd` unit) as part of slice-3 fix application. The `_configure_logging` + `uvicorn log_config=None` change is platform-agnostic, so app.log capture works on Linux out of the box.
+4. **Configurability**: `Settings.host = "127.0.0.1"` hard-coded. To listen on a non-loopback interface on the VPS, edit `backend/app/config.py` (the env-var path doesn't currently work — `BaseModel`, not `BaseSettings`; see F at the end of MINOR deferred list). Default `ADMIN_TOKEN` regenerates per boot — pin via environment.
+5. **Apply F38–F51**: in ID order. After each fix, change its row's status in the table above from "PENDING" to applied (or replace the table with a per-row applied/deferred column). Verification: `ruff check app scripts/<files>`, `python -m compileall -q app scripts`, then a smoke-test script asserting each fix's behavior. **Per the lessons-learned from slice 2: smoke tests must NOT write to tracked data files — copy `backend/data/*.json` to a `TemporaryDirectory` before exercising the registry.**
+6. **Commit**: a single "slice 3 audit: harden API + boot path" commit covering F38–F51. Push to origin.
+7. **Then proceed to slice 4** (`data-live.js`, `app.jsx`, `Pre-IPO Normalizer.html`, lightly `styles.css`). Same parallel-reviewer pattern. Slice 4 should explicitly target the BE↔FE enum drift problem (Pydantic `Literal` additions need matching `STRUCT_META`/`SRC_META` keys in the FE or the whole table blanks out).
+
+### Artifacts from this slice (not committed; regenerable)
+
+The raw reviewer reports live in the repo root but are gitignored:
+`slice_3_prompt.txt`, `claude_slice_3.md`, `codex_slice_3.md`. To re-run on
+VPS: `codex exec --skip-git-repo-check -s read-only --cd "$(pwd)" -o codex_slice_3.md "$(cat slice_3_prompt.txt)"`. The Claude-side review was a
+general-purpose sub-agent invocation from the parent session.

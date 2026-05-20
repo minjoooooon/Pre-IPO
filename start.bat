@@ -24,7 +24,12 @@ REM set ADMIN_TOKEN=replace-me-with-your-secret
 
 REM Hidden launch. -WindowStyle Hidden hides this PowerShell stub;
 REM Start-Process -WindowStyle Hidden hides the python window itself.
-powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath python -ArgumentList '-m','app.main' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden"
+REM
+REM -RedirectStandardError captures pre-logging-configured failures
+REM (import errors, syntax errors, the brief window before _configure_logging
+REM runs in __main__). Once logging is up, uvicorn bind errors go straight to
+REM backend/logs/app.log; bootstrap.err only catches the earliest crashes.
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath python -ArgumentList '-m','app.main' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden -RedirectStandardError '%~dp0backend\logs\bootstrap.err' -RedirectStandardOutput '%~dp0backend\logs\bootstrap.out'"
 
 REM Open the dashboard after uvicorn has time to bind :8000.
 REM /B keeps no extra window; the cmd subshell self-exits after starting the URL.

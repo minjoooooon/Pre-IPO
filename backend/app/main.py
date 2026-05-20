@@ -73,6 +73,9 @@ _ADAPTER_CLASSES = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Idempotent: also called from __main__ before uvicorn.run so that
+    # uvicorn's own bind/startup errors land in app.log. The guards inside
+    # _configure_logging skip duplicate handlers on the second call.
     _configure_logging()
     log.info("startup", host=settings.host, port=settings.port, db=str(settings.db_path))
     # Log the active admin token once at startup so the operator can copy it
@@ -186,9 +189,23 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
+    # Configure logging BEFORE uvicorn binds. Previously this only ran inside
+    # `lifespan`, which fires after the bind — so an EADDRINUSE on :8000 left
+    # zero trace in app.log (uvicorn's stderr was hidden by start.bat's
+    # -WindowStyle Hidden, masking the failure entirely).
+    _configure_logging()
+    log.info("pre_uvicorn_bind", host=settings.host, port=settings.port)
+
+    # log_config=None skips uvicorn's own dictConfig, leaving uvicorn,
+    # uvicorn.error, and uvicorn.access as vanilla loggers that propagate to
+    # root — where our RotatingFileHandler catches them. access_log=False
+    # mutes the per-request line that would otherwise flood app.log with
+    # FE polling traffic.
     uvicorn.run(
         "app.main:app",
         host=settings.host,
         port=settings.port,
         reload=False,
+        log_config=None,
+        access_log=False,
     )

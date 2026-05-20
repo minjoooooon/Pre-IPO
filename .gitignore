@@ -41,7 +41,9 @@ Thumbs.db
 .env
 .env.*
 *.local
-AUDIT_LOG.md
+# AUDIT_LOG.md is now tracked — it's the canonical resume pointer for the
+# audit workflow and needs to travel to the VPS via git. The raw reviewer
+# reports stay gitignored (regenerable, drafty, large).
 codex_slice_*.md
 claude_slice_*.md
 slice_*_prompt.txt
