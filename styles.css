@@ -1269,3 +1269,20 @@ body {
 }
 .struct-filter .tab { display: inline-flex; align-items: center; gap: 4px; }
 .struct-filter .tab .muted { opacity: 0.65; }
+
+/* Per-row risk chips (THIN liquidity + DRIFT calibration age). Reuses the
+   existing .risk-chip .inline class from HedgeBook for tone (warn/bad/ok)
+   so the visual vocabulary stays consistent across panels. The wrapper
+   gives the chips a tiny gap and lets them wrap on narrow rows. */
+.risk-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.risk-chips.compact {
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+.venue-cell + .risk-chips { display: flex; }

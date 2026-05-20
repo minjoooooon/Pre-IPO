@@ -203,6 +203,53 @@ _storage['preIpoAlerts'] = JSON.stringify({});
 const empty = live.loadAlerts();
 ok(Array.isArray(empty) && empty.length === 0, 'SIM: loadAlerts returns [] for non-array storage');
 
+// RISK CHIPS — DRIFT + THIN (Rebatify-inspired additions)
+ok(/function getDriftDays/.test(AJ), 'RISK: getDriftDays helper exists');
+ok(/function getDriftSeverity/.test(AJ), 'RISK: getDriftSeverity helper exists');
+ok(/function getLiquidityFlag/.test(AJ), 'RISK: getLiquidityFlag helper exists');
+ok(/function RiskChips/.test(AJ), 'RISK: RiskChips component exists');
+ok(/<RiskChips row=\{r\} \/>/.test(AJ), 'RISK: NormTable renders RiskChips');
+ok(/<RiskChips row=\{r\} compact \/>/.test(AJ), 'RISK: VenueCards renders RiskChips compact');
+ok(/days >= 30/.test(AJ) || /days < 30/.test(AJ), 'RISK: drift threshold at 30d');
+ok(/days < 90/.test(AJ) || /days >= 90/.test(AJ), 'RISK: drift severity threshold at 90d');
+ok(/r\.spread > 50/.test(AJ), 'RISK: THIN heuristic uses spread>50bp');
+ok(/< 100_000/.test(AJ) || /< 100000/.test(AJ), 'RISK: THIN heuristic uses $100K floor');
+
+// RISK functional sim — extract and exercise the helper logic
+const riskHelpersMatch = AJ.match(/function getDriftDays[\s\S]*?function getLiquidityFlag[\s\S]*?\n\}/);
+ok(riskHelpersMatch != null, 'RISK SIM: helpers block extracted');
+if (riskHelpersMatch) {
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(
+    riskHelpersMatch[0] +
+    '\nreturn { getDriftDays, getDriftSeverity, getLiquidityFlag };'
+  );
+  const R = factory();
+  // Drift severity boundaries
+  ok(R.getDriftSeverity(null) === null, 'RISK SIM: drift null → no chip');
+  ok(R.getDriftSeverity(0) === null, 'RISK SIM: drift 0d → no chip');
+  ok(R.getDriftSeverity(29) === null, 'RISK SIM: drift 29d → no chip');
+  ok(R.getDriftSeverity(30) === 'warn', 'RISK SIM: drift 30d → warn');
+  ok(R.getDriftSeverity(89) === 'warn', 'RISK SIM: drift 89d → warn');
+  ok(R.getDriftSeverity(90) === 'bad', 'RISK SIM: drift 90d → bad');
+  ok(R.getDriftSeverity(365) === 'bad', 'RISK SIM: drift 365d → bad');
+  // Liquidity flag
+  ok(R.getLiquidityFlag({ spread: 80, vol24: 5_000_000, oi: 5_000_000 }) === 'thin', 'RISK SIM: spread>50bp → thin even with deep book');
+  ok(R.getLiquidityFlag({ spread: 30, vol24: 50_000, oi: 50_000 }) === 'thin', 'RISK SIM: shallow vol+OI → thin even with tight spread');
+  ok(R.getLiquidityFlag({ spread: 30, vol24: 5_000_000, oi: 5_000_000 }) === null, 'RISK SIM: deep + tight → no chip');
+  ok(R.getLiquidityFlag({ spread: 0, vol24: 0, oi: 0 }) === null, 'RISK SIM: cold-start (no data) → no chip, not thin');
+  ok(R.getLiquidityFlag({ spread: 30, vol24: 500_000, oi: 0 }) === null, 'RISK SIM: spot venue with no OI but real vol → not thin');
+  ok(R.getLiquidityFlag(null) === null, 'RISK SIM: null row → no chip');
+  // Drift days calculation
+  const futureISO = new Date(Date.now() + 86400000).toISOString();
+  ok(R.getDriftDays(futureISO) === null, 'RISK SIM: future calibration date → null (no drift)');
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000).toISOString();
+  const d = R.getDriftDays(sixtyDaysAgo);
+  ok(d === 60 || d === 59, `RISK SIM: 60d-ago ISO → ${d} (within rounding)`);
+  ok(R.getDriftDays(null) === null, 'RISK SIM: null ISO → null');
+  ok(R.getDriftDays('not-a-date') === null, 'RISK SIM: garbage ISO → null');
+}
+
 // FILTER functional sim — extract the helpers by regex and eval them.
 // Tests the LOGIC of structIsPerp / applyStructFilter / countByFilter
 // against the actual source in app.jsx.

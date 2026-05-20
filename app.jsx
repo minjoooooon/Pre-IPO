@@ -100,6 +100,76 @@ function getSrcMeta(s) {
   return SRC_META[s] || { dot: "neutral", label: s || "unknown" };
 }
 
+// Calibration age in days. `ratio_calibrated_at` comes through as an ISO
+// string (e.g. "2026-05-20T13:00:00Z"). null/garbage → null so the caller
+// can skip rendering. Floor on whole-day so we don't emit "DRIFT 0d" the
+// hour after a re-calibrate.
+function getDriftDays(isoStr) {
+  if (!isoStr) return null;
+  const ms = new Date(isoStr).getTime();
+  if (!isFinite(ms)) return null;
+  const days = Math.floor((Date.now() - ms) / (1000 * 60 * 60 * 24));
+  return days >= 0 ? days : null;
+}
+
+// Drift severity buckets — null = no chip, "warn" = stale (>=30d),
+// "bad" = very stale (>=90d). Tuned for pre-IPO synthetics where the
+// back-solved subscription anchors decay roughly on a quarter cadence.
+function getDriftSeverity(days) {
+  if (days == null || days < 30) return null;
+  if (days < 90) return "warn";
+  return "bad";
+}
+
+// Liquidity flag — "thin" when either the quoted spread is too wide for
+// the mid to mean anything (>50bp, so a round-trip costs >1% of the gap),
+// OR the venue is shallow in absolute terms (max(OI, vol24) below $100K).
+// Returns null on a row that hasn't ticked yet (no signal); TickAge already
+// surfaces "no recent tick" separately.
+function getLiquidityFlag(r) {
+  if (!r) return null;
+  const spreadWide = (typeof r.spread === "number" && r.spread > 50);
+  const oi = r.oi || 0;
+  const vol = r.vol24 || 0;
+  const liquidity = Math.max(oi, vol);
+  // liquidity === 0 means the adapter hasn't reported volume/OI yet — treat
+  // as "no signal" rather than "thin" so cold-start rows don't get false
+  // warnings.
+  const shallow = liquidity > 0 && liquidity < 100_000;
+  if (spreadWide || shallow) return "thin";
+  return null;
+}
+
+function RiskChips({ row, compact = false }) {
+  // Combined per-row risk signal: liquidity warning + calibration drift.
+  // Rendered together so the operator sees both at a glance instead of
+  // hunting through columns. Reuses the existing .risk-chip .inline class
+  // from HedgeBook for visual consistency.
+  if (!row) return null;
+  const liq = getLiquidityFlag(row);
+  const driftDays = getDriftDays(row.ratioCalibratedAt);
+  const driftSev = getDriftSeverity(driftDays);
+  if (!liq && !driftSev) return null;
+  const liqTitle = liq
+    ? `Liquidity risk: spread=${row.spread || 0}bp · vol24=$${fmtUSD(row.vol24)} · OI=$${fmtUSD(row.oi)}.\nQuoted mid may not fill at size — round-trip cost can erase the headline gap.`
+    : "";
+  const driftTitle = driftSev
+    ? `Last calibrated ${row.ratioCalibratedAt} (${driftDays}d ago).\nRe-verify share_ratio before sizing — back-solved anchors decay; market-fitted guesses need ratification.`
+    : "";
+  return (
+    <span className={"risk-chips" + (compact ? " compact" : "")}>
+      {liq === "thin" && (
+        <span className="risk-chip warn inline" title={liqTitle}>THIN</span>
+      )}
+      {driftSev && (
+        <span className={"risk-chip " + driftSev + " inline"} title={driftTitle}>
+          DRIFT {driftDays}d
+        </span>
+      )}
+    </span>
+  );
+}
+
 // Spot/Perp split: perp instruments carry funding + liquidation risk;
 // everything else (SPV-backed, SPV-mirror, synthetic, mirror-credit,
 // pre-ipo-certificate) is "spot-like" — no funding leg, principal at risk
@@ -976,6 +1046,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                       )}
                       <TickAge tickAt={r.tickAt}/>
                     </div>
+                    <RiskChips row={r} />
                   </td>
                   <td className="l">
                     <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
@@ -1525,6 +1596,8 @@ function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange })
                 </div>
                 <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
               </div>
+
+              <RiskChips row={r} compact />
 
               <div className="vc-main mono accent">${fmtUSD(r.impliedFDV)}</div>
 
