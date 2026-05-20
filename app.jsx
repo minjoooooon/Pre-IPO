@@ -1580,10 +1580,148 @@ function TopGap({ rows }) {
 
 // ============================================================
 // VenueCards — at-a-glance grid comparing implied FDV / premium /
-// funding / vol across exchanges for the selected asset. Replaces
-// the heavy ValuationChart in the primary slot so the user can
-// scan venues without parsing a time series.
+// funding / vol across exchanges for the selected asset.
+//
+// Cross-venue comparison only makes sense within the same product class:
+// a Bitget mirror-credit at $1.89T isn't directly arbitrageable against
+// an OKX perp at $2.36T (settlement, custody, post-IPO conversion all
+// differ — cf. the Caveat panel). So we split the panel into two
+// dedicated sections — SPOT/MIRROR/CERTIFICATE and PERP/FUTURES — each
+// with its own header, count, TopGap headline, and grid. The
+// structFilter toggle still works as a focus mode for when the operator
+// only wants one class on screen.
 // ============================================================
+function VenueCard({ r, refFdv, cons }) {
+  const premRef = safeRatioPct(r.impliedFDV, refFdv);
+  const premCons = safeRatioPct(r.impliedFDV, cons);
+  const isPerp = r.structure === "perp";
+  const fPct = r.fundingRate != null ? r.fundingRate * 100 : null;
+  const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
+  // Perps are exchange-traded futures; spot/mirror/SPV are not. The
+  // section header already says "PERP / FUTURES" so we don't repeat the
+  // "(future)" suffix inside the card — keeps the meta line shorter.
+  const hoverTitle =
+    `${r.ex} · ${r.symbol || ""}\n` +
+    `Token: $${fmtNum(r.tokenPrice)}\n` +
+    `Ratio: 1 : ${fmtNum(r.shareRatio, 4)} (${getSrcMeta(r.ratioSource).label})\n` +
+    `Confidence: ${r.confidence}/100`;
+  return (
+    <div
+      className={"venue-card " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")}
+      title={hoverTitle}
+    >
+      <div className="vc-head">
+        <div className="vc-head-l">
+          <span className="vc-name">{r.ex}</span>
+          <span className="vc-sub muted">{meta.label} · {r.venue}</span>
+          {r.symbol && (
+            <span className="vc-symbol mono muted" title="exchange-canonical symbol">{r.symbol}</span>
+          )}
+        </div>
+        <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
+      </div>
+
+      <RiskChips row={r} compact />
+
+      <div className="vc-main mono accent">${fmtUSD(r.impliedFDV)}</div>
+
+      <div className="vc-stat">
+        <span className="vc-stat-v mono">${fmtNum(r.tokenPrice)}</span>
+        <span className="vc-stat-k muted">가격</span>
+      </div>
+      <div className="vc-stat">
+        <span className={"vc-stat-v mono " + (premRef == null ? "muted" : premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
+        <span className="vc-stat-k muted">변동</span>
+      </div>
+      <div className="vc-stat">
+        <span className="vc-stat-v mono">{r.vol24 ? "$" + fmtUSD(r.vol24) : "—"}</span>
+        <span className="vc-stat-k muted">거래량</span>
+      </div>
+      {isPerp && (
+        <div className="vc-stat">
+          <span className={"vc-stat-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
+            {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
+          </span>
+          <span className="vc-stat-k muted">펀비</span>
+        </div>
+      )}
+      <div className="vc-stat">
+        <span className={"vc-stat-v mono " + (premCons == null ? "muted" : premCons >= 0 ? "ok" : "bad")}>
+          {fmtPct(premCons, 2)}
+        </span>
+        <span className="vc-stat-k muted">갭(%)</span>
+      </div>
+    </div>
+  );
+}
+
+function DisabledVenueCard({ d }) {
+  const meta = STRUCT_META[d.structure] || { sym: "?", tone: "neutral", label: d.structure };
+  return (
+    <div className="venue-card vc-disabled" title={d.reason}>
+      <div className="vc-head">
+        <div className="vc-head-l">
+          <span className="vc-name muted">{d.ex}</span>
+          <span className="vc-sub muted">{meta.label} · {d.venue || "?"}</span>
+        </div>
+        <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
+      </div>
+      <div className="vc-main mono muted">—</div>
+      <div className="vc-stat">
+        <span className="vc-stat-v mono muted">disabled</span>
+        <span className="vc-stat-k muted">상태</span>
+      </div>
+      {d.symbol && (
+        <div className="vc-stat">
+          <span className="vc-stat-v mono muted vc-ticker">{d.symbol}</span>
+          <span className="vc-stat-k muted">티커</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VenueSection({ kind, rows, disabled, refFdv, cons }) {
+  // kind: 'spot' | 'perp'. Renders a labeled mini-panel (header + TopGap +
+  // grid). Each section is independent so a TopGap on the SPOT section
+  // doesn't reach across to compare with a PERP venue (those gaps usually
+  // reflect structure mismatch, not arb).
+  const isSpot = kind === "spot";
+  const heading = isSpot ? "SPOT / MIRROR / CERTIFICATE" : "PERP / FUTURES";
+  const sub = isSpot
+    ? "principal-at-risk to issuer; no funding leg; settles in cash or rebased shares post-IPO"
+    : "perpetual futures; carry funding + liquidation risk; oracle-marked";
+  const hasAny = rows.length > 0 || disabled.length > 0;
+  return (
+    <div className={"vc-section vc-section-" + kind}>
+      <div className="vc-section-h">
+        <div className="vc-section-h-l">
+          <span className="vc-section-label mono">{heading}</span>
+          <span className="vc-section-sub muted">{sub}</span>
+        </div>
+        <span className="vc-section-count mono muted">
+          {rows.length} live · {disabled.length} disabled
+        </span>
+      </div>
+      {!hasAny ? (
+        <div className="vc-section-empty muted">No {isSpot ? "spot/mirror/certificate" : "perp"} venues configured for this asset.</div>
+      ) : (
+        <>
+          <TopGap rows={rows} />
+          <div className="venue-grid">
+            {rows.map((r) => (
+              <VenueCard key={r.ex} r={r} refFdv={refFdv} cons={cons} />
+            ))}
+            {disabled.map((d) => (
+              <DisabledVenueCard key={"dis-" + d.ex} d={d} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange }) {
   const refFdv = asset.lastRound.valuation;
   const cons = norm.consensus;
@@ -1592,14 +1730,20 @@ function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange })
   // Counts for the filter chip are computed on the FULL set (live + disabled)
   // so a SPOT filter still shows "PERP (3)" before flipping.
   const counts = countByFilter([...allRows, ...allDisabled]);
-  const rows = applyStructFilter(allRows, structFilter);
-  const disabled = applyStructFilter(allDisabled, structFilter);
+
+  const spotRows = allRows.filter((r) => !structIsPerp(r.structure));
+  const spotDisabled = allDisabled.filter((d) => !structIsPerp(d.structure));
+  const perpRows = allRows.filter((r) => structIsPerp(r.structure));
+  const perpDisabled = allDisabled.filter((d) => structIsPerp(d.structure));
+
+  const showSpot = structFilter === "all" || structFilter === "spot";
+  const showPerp = structFilter === "all" || structFilter === "perp";
 
   return (
     <div className="panel venue-cards-panel">
       <PanelHead
         title="VENUES · LIVE COMPARISON"
-        sub={<>Implied FDV per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · funding (perp only)</>}
+        sub={<>Implied FDV per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · split by product class (spot vs perp)</>}
         right={
           <div className="vc-head-right">
             <StructFilter
@@ -1607,106 +1751,28 @@ function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange })
               onChange={onStructFilterChange || (() => {})}
               counts={counts}
             />
-            <div className="vc-legend mono muted">
-              {rows.length} live · {disabled.length} disabled
-            </div>
           </div>
         }
       />
-      <TopGap rows={rows} />
-      <div className="venue-grid">
-        {rows.map((r) => {
-          const premRef = safeRatioPct(r.impliedFDV, refFdv);
-          const premCons = safeRatioPct(r.impliedFDV, cons);
-          const isPerp = r.structure === "perp";
-          const fPct = r.fundingRate != null ? r.fundingRate * 100 : null;
-          const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
-          // Perps are exchange-traded futures; spot/mirror/SPV are not.
-          // Show "(future)" next to the label so users immediately see which
-          // cards carry funding and which don't.
-          const kindSuffix = isPerp ? " (future)" : "";
-          // Hover-only detail block. Avoids cluttering the at-a-glance card.
-          const hoverTitle =
-            `${r.ex} · ${r.symbol || ""}\n` +
-            `Token: $${fmtNum(r.tokenPrice)}\n` +
-            `Ratio: 1 : ${fmtNum(r.shareRatio, 4)} (${getSrcMeta(r.ratioSource).label})\n` +
-            `Confidence: ${r.confidence}/100`;
-          return (
-            <div
-              key={r.ex}
-              className={"venue-card " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")}
-              title={hoverTitle}
-            >
-              <div className="vc-head">
-                <div className="vc-head-l">
-                  <span className="vc-name">{r.ex}</span>
-                  <span className="vc-sub muted">{meta.label}{kindSuffix} · {r.venue}</span>
-                  {r.symbol && (
-                    <span className="vc-symbol mono muted" title="exchange-canonical symbol">{r.symbol}</span>
-                  )}
-                </div>
-                <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
-              </div>
-
-              <RiskChips row={r} compact />
-
-              <div className="vc-main mono accent">${fmtUSD(r.impliedFDV)}</div>
-
-              <div className="vc-stat">
-                <span className="vc-stat-v mono">${fmtNum(r.tokenPrice)}</span>
-                <span className="vc-stat-k muted">가격</span>
-              </div>
-              <div className="vc-stat">
-                <span className={"vc-stat-v mono " + (premRef == null ? "muted" : premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
-                <span className="vc-stat-k muted">변동</span>
-              </div>
-              <div className="vc-stat">
-                <span className="vc-stat-v mono">{r.vol24 ? "$" + fmtUSD(r.vol24) : "—"}</span>
-                <span className="vc-stat-k muted">거래량</span>
-              </div>
-              {isPerp && (
-                <div className="vc-stat">
-                  <span className={"vc-stat-v mono " + (fPct == null ? "muted" : fPct >= 0 ? "warn" : "ok")}>
-                    {fPct == null ? "—" : (fPct >= 0 ? "+" : "") + fPct.toFixed(4) + "%"}
-                  </span>
-                  <span className="vc-stat-k muted">펀비</span>
-                </div>
-              )}
-              <div className="vc-stat">
-                <span className={"vc-stat-v mono " + (premCons == null ? "muted" : premCons >= 0 ? "ok" : "bad")}>
-                  {fmtPct(premCons, 2)}
-                </span>
-                <span className="vc-stat-k muted">갭(%)</span>
-              </div>
-            </div>
-          );
-        })}
-
-        {disabled.map((d) => {
-          const meta = STRUCT_META[d.structure] || { sym: "?", tone: "neutral", label: d.structure };
-          return (
-            <div key={"dis-" + d.ex} className="venue-card vc-disabled" title={d.reason}>
-              <div className="vc-head">
-                <div className="vc-head-l">
-                  <span className="vc-name muted">{d.ex}</span>
-                  <span className="vc-sub muted">{meta.label} · {d.venue || "?"}</span>
-                </div>
-                <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
-              </div>
-              <div className="vc-main mono muted">—</div>
-              <div className="vc-stat">
-                <span className="vc-stat-v mono muted">disabled</span>
-                <span className="vc-stat-k muted">상태</span>
-              </div>
-              {d.symbol && (
-                <div className="vc-stat">
-                  <span className="vc-stat-v mono muted vc-ticker">{d.symbol}</span>
-                  <span className="vc-stat-k muted">티커</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="vc-sections">
+        {showSpot && (
+          <VenueSection
+            kind="spot"
+            rows={spotRows}
+            disabled={spotDisabled}
+            refFdv={refFdv}
+            cons={cons}
+          />
+        )}
+        {showPerp && (
+          <VenueSection
+            kind="perp"
+            rows={perpRows}
+            disabled={perpDisabled}
+            refFdv={refFdv}
+            cons={cons}
+          />
+        )}
       </div>
     </div>
   );

@@ -91,7 +91,9 @@ ok(/structFilter=\{structFilter\}/.test(AJ), 'FILTER: structFilter prop threaded
 ok(/onStructFilterChange=\{setStructFilter\}/.test(AJ), 'FILTER: setStructFilter callback threaded');
 ok(/applyStructFilter\(norm\.rows/.test(AJ), 'FILTER: NormTable applies filter to live rows');
 ok(/applyStructFilter\(allDisabled/.test(AJ), 'FILTER: disabled rows respect filter too');
-ok(/applyStructFilter\(allRows/.test(AJ), 'FILTER: VenueCards applies filter to live rows');
+// VenueCards now splits via structIsPerp directly per-section (not applyStructFilter),
+// so the filter just controls section visibility — see SECTIONS asserts above.
+ok(/structIsPerp\(r\.structure\)/.test(AJ), 'FILTER: VenueCards splits sections via structIsPerp');
 
 // ---- Parse check via babel-standalone ----
 try {
@@ -202,6 +204,17 @@ ok(stored.length === 1 && stored[0].id === 'good', 'SIM: loadAlerts self-heals l
 _storage['preIpoAlerts'] = JSON.stringify({});
 const empty = live.loadAlerts();
 ok(Array.isArray(empty) && empty.length === 0, 'SIM: loadAlerts returns [] for non-array storage');
+
+// SECTIONS — Rebatify-style spot/perp split into independent sections
+ok(/function VenueSection/.test(AJ), 'SECTIONS: VenueSection helper component exists');
+ok(/function VenueCard\(/.test(AJ), 'SECTIONS: VenueCard render extracted');
+ok(/function DisabledVenueCard/.test(AJ), 'SECTIONS: DisabledVenueCard render extracted');
+ok(/SPOT \/ MIRROR \/ CERTIFICATE/.test(AJ), 'SECTIONS: spot section labeled');
+ok(/PERP \/ FUTURES/.test(AJ), 'SECTIONS: perp section labeled');
+ok(/const showSpot = structFilter === "all" \|\| structFilter === "spot"/.test(AJ), 'SECTIONS: filter still gates which sections render');
+ok(/spotRows = allRows\.filter\(\(r\) => !structIsPerp/.test(AJ), 'SECTIONS: spot rows filtered by !structIsPerp');
+ok(/perpRows = allRows\.filter\(\(r\) => structIsPerp/.test(AJ), 'SECTIONS: perp rows filtered by structIsPerp');
+ok(/No \{isSpot \? "spot\/mirror\/certificate" : "perp"\} venues configured/.test(AJ), 'SECTIONS: empty-section placeholder');
 
 // TOPGAP — Rebatify-style "cheapest → richest" hero
 ok(/function TopGap/.test(AJ), 'TOPGAP: component exists');

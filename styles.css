@@ -1287,6 +1287,70 @@ body {
 }
 .venue-cell + .risk-chips { display: flex; }
 
+/* VenueCards split sections — SPOT / PERP rendered as distinct mini-panels
+   inside the same panel. Visual separation prevents the operator from
+   reading a "+35% gap" between a mirror-credit row and a perp row as
+   arbitrage (it's a structure mismatch). Each section has its own header
+   strip + count + TopGap. */
+.vc-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 16px 16px 16px;
+}
+.vc-section {
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--bg-1);
+  padding: 12px 14px 14px 14px;
+}
+.vc-section-spot { border-left: 3px solid var(--c-cyan, var(--accent, #5fb3d3)); }
+.vc-section-perp { border-left: 3px solid var(--c-magenta, var(--accent-2, #d35fbb)); }
+.vc-section-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.vc-section-h-l {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.vc-section-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--tx-1);
+  text-transform: uppercase;
+}
+.vc-section-sub {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+.vc-section-count {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.vc-section-empty {
+  font-size: 12px;
+  padding: 20px 4px;
+  font-style: italic;
+}
+/* TopGap inside a section: tighter margin so it sits right under the header */
+.vc-section .topgap-row {
+  margin: 4px 0 10px 0;
+}
+/* Venue grid inside a section: drop the outer padding (section already pads) */
+.vc-section .venue-grid {
+  padding: 0;
+}
+
 /* TopGap — single-row arb headline above the venue grid. Designed to be
    immediately scannable: cheapest venue · arrow · richest venue · big % ·
    USD gap. The % is rendered in the .ok accent so the eye locks on it. */
