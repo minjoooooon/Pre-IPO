@@ -12,6 +12,7 @@
 | 2 | registry + admin + calibrate + data files + models | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+11 smoke | ✅ `48daec8` |
 | 3 | rest/ws/health api + main + config + start/stop.bat | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+33 smoke | ✅ |
 | 4 | data-live.js + app.jsx + HTML | ✅ | ✅ | ✅ | ✅ | ✅ babel-parse+node-sim+47 smoke | ✅ |
+| 5 | gate/bingx never-audited + post-slice drift (FE additions, start.sh, status broadcast, OI/funding units) | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+33 BE smoke+131 FE smoke+/readyz live | ✅ |
 
 ## Slice 1 — data ingestion path
 
@@ -343,3 +344,72 @@ chain of unguarded divide-by-`refFdv` / `norm.consensus` math paths.
 ### Artifacts from this slice (regenerable)
 - Gitignored: `slice_4_prompt.txt`, `claude_slice_4.md`, `codex_slice_4.md`
 - Committed: `.check/smoke_slice4.cjs` + `.check/check_jsx.cjs` + `.check/package.json` (needs `npm install` inside `.check/` to pull `@babel/standalone`; `node_modules/` stays gitignored).
+
+## Slice 5 — never-audited + post-slice drift
+
+**Date:** 2026-05-20 (KST).
+
+### Reviewer verdicts
+- **Self-review** (Claude general-purpose sub-agent): 3 CRITICAL, 8 IMPORTANT, 8 MINOR. Verdict: `acceptable-with-fixes`.
+- **Codex review**: 2 CRITICAL, 3 IMPORTANT, 1 MINOR. Verdict: `unsafe`.
+
+Both converged on **cross-adapter unit drift** (OI denomination + funding cadence inconsistent across OKX/BingX/HL) and **status-broadcast plumbing existing but never called** (FE saw stale adapter health until snapshot/config-update).
+
+### Overlap findings (both flagged)
+- Funding APR formula `rate*3*365` is OKX-8h-specific; HL is per-hour → 8× APR understatement
+- AdapterStatus `exchange` collapse: 3 OKX adapters all reported `exchange="okx"`, FE merged → an unhealthy peer greys out healthy siblings
+- NormTable "vs CONS." under filter compared against full-set consensus
+
+### Claude-unique
+- 🔴 HL OI in base units (`hyperliquid.py:194`); probe `openInterest=2089` base × $2164 markPx = $4.5M real but FE rendered $2089 (~1000× understated)
+- 🔴 BingX OI squared (`bingx.py:185-186`); `openInterest=980327` (already USDT) × $2129.7 = $2.09B notional on a $1.2M-vol venue (1700× OI/vol — physically impossible)
+- I7 BingX `closeTime` may be data-cadence-aligned not poll-aligned → `INSERT OR IGNORE` could collapse polls into one row
+- I8 NormTable disabled rows bypass getStructMeta fallback contract
+- I1 Gate/Bitget back-solved `ratio_calibrated_at` set to "today" — defeats DRIFT chip
+
+### Codex-unique
+- 🔴 `gate.py _to_float` accepts NaN/Inf (every sibling rejects)
+- 🟡 `broadcast_status()` never called from supervisor — FE only sees status on snapshot/config-update
+- 🟡 `start.sh` declares success before verifying the child survived
+
+### Applied fixes (2026-05-20)
+
+| ID | File(s) | Severity | Source | Change |
+|---|---|---|---|---|
+| F64 | hyperliquid.py | CRITICAL | Claude | OI multiplied by markPx before yielding (HL publishes `openInterest` in base units, unlike OKX/BingX). Adds `funding_interval_hours=1`. |
+| F65 | models.py + okx.py + bingx.py + hyperliquid.py + normalizer.py + aggregator.py + data-live.js + app.jsx | CRITICAL | both | New `funding_interval_hours` threaded Tick → NormalizedQuote → FE row. OKX/BingX set 8; HL sets 1. `fundingAPR(rate, intervalHours)` annualizes via `(24/hours)*365`. HedgeBook + FundingPanel use per-leg cadence. Default 8 for back-compat. |
+| F66 | bingx.py | CRITICAL | Claude | `_fetch_open_interest` returns BingX's `openInterest` directly (already USDT). Prior `oi*lastPrice` squared the value. |
+| F67 | gate.py | CRITICAL | codex | `_to_float` now rejects NaN/Inf (mirrors okx/bingx). |
+| F68 | aggregator.py + config.py | IMPORTANT | codex | New `_status_loop()` task broadcasts `supervisor.statuses()` every `status_broadcast_interval_seconds` (default 30s). FE FeedsCell + DISABLED refresh without waiting for snapshot. |
+| F69 | models.py + supervisor.py + data-live.js | IMPORTANT | both | `AdapterStatus.market_id` required; supervisor sets it in all 3 status-construction sites. FE `rebuildDisabled` keys by `market_id` instead of `exchange`. Live `/api/status` returns 13 distinct entries (was collapsed). |
+| F70 | app.jsx | IMPORTANT | both | NormTable computes filter-scoped consensus when `structFilter !== "all"`; column header shows `vs CONS. (spot)` / `(perp)`. KPIStrip stays full-set. |
+| F71 | start.sh | IMPORTANT | codex | After `nohup ... &` + PID write, sleep 2s and `kill -0`; if dead, tail `bootstrap.err` + exit non-zero, no stale PID. |
+| F72 | bingx.py | IMPORTANT | Claude | Tick timestamp uses `time.time()` instead of `closeTime` (data-cadence-aligned → `INSERT OR IGNORE` collapse risk). |
+| F73 | app.jsx | MINOR | Claude | NormTable disabled rows route through `getStructMeta(d.structure)` for symmetry with live rows (F56 contract). |
+| F74 | data/markets.json | MINOR | Claude | Bitget/Gate/BingX-PreStocks `ratio_calibrated_at` reset to anchor-subscription dates (2026-04-15 / 2026-04-20) so DRIFT chip fires correctly on the 30d/90d boundaries. |
+| F75 | stop.sh | MINOR | Claude | `matches_app()` checks `/proc/<pid>/cmdline` (Linux) or `ps -o args=` (macOS) before killing — PID-reuse safety. |
+| F76 | start.sh | MINOR | Claude | Venv discovery prefers `backend/.venv` (where pyproject.toml lives) over root `.venv` (tooling venv). |
+| F77 | main.py | MINOR | Claude | `_allowed_root_files` drops `data.js` (replaced by `data-live.js`). |
+
+### Verification (2026-05-20)
+- `ruff check app` → clean; `compileall -q app` → clean
+- `smoke_slice3.py` → 33 PASS (smoke updated for `market_id` in fake AdapterStatus)
+- `smoke_slice4.cjs` → 131 PASS (12 new SLICE-5 assertions: F65 cadence, F69 market_id keying, F70 scoped consensus + scope label, F73 getStructMeta)
+- Live `/readyz` → `{"adapters":13,"fresh":13}` after warm-up
+- Live `/api/status` → 13 distinct (market_id, exchange) pairs (F69 verified)
+- Live `/api/history/SPACEX` sanity (F64+F66 verified):
+  - BingX OI ~$962K (was $2B pre-F66 — ~2200× reduction, matches $1.2M vol pattern)
+  - HL OI $4.5M vntl / $33.8M hl-xyz (was ~$2K/$33K pre-F64 — now USD-denominated)
+  - Consensus weights now proportional across all 13 markets
+
+### Deferred (recorded, do not apply in this slice)
+- M1: redundant `"uncalibrated"` fallback at two layers in data-live.js — both correct today, tripwire only
+- M2: `getDriftDays` null-returns on future-dated calibrations — intentional clock-skew tolerance
+- React-dev UMD + Babel-standalone in production HTML — deferred from slice 4
+- Admin token in localStorage — acceptable on loopback, needs CSP for VPS
+- Supervisor doesn't re-evaluate adapter enablement after admin writes — deferred since slice 2
+- `*.ps1 text eol=crlf` not pinned in `.gitattributes` (no current .ps1 file)
+- `funding_interval_hours` not persisted in SQLite — slice-6 schema migration candidate
+
+### Artifacts from this slice (regenerable)
+- Gitignored: `slice_5_prompt.txt`, `claude_slice_5.md`, `codex_slice_5.md`

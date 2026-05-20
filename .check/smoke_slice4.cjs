@@ -55,7 +55,8 @@ ok(!/SRC_META\[anchor\.ratioSource\]\.label/.test(AJ), 'F56: no unguarded SRC_ME
 ok(/function safePct/.test(AJ), 'F57: safePct helper exists');
 ok(/function safeRatioPct/.test(AJ), 'F57: safeRatioPct helper exists');
 ok(!/\(\(norm\.consensus - refFdv\) \/ refFdv\) \* 100/.test(AJ), 'F57: AssetHeader uses safePct');
-ok(/safeRatioPct\(r\.impliedFDV, norm\.consensus\)/.test(AJ), 'F57: NormTable prem uses safeRatioPct');
+// F57 + F70: NormTable now uses consInScope (filter-scoped) instead of norm.consensus directly
+ok(/safeRatioPct\(r\.impliedFDV, consInScope\)/.test(AJ), 'F57+F70: NormTable prem uses safeRatioPct against scoped consensus');
 
 // F58 — handleTick rejects share_ratio<=0
 ok(/!isLiveMarket\(market\)/.test(DL), 'F58: handleTick uses isLiveMarket gate');
@@ -204,6 +205,24 @@ ok(stored.length === 1 && stored[0].id === 'good', 'SIM: loadAlerts self-heals l
 _storage['preIpoAlerts'] = JSON.stringify({});
 const empty = live.loadAlerts();
 ok(Array.isArray(empty) && empty.length === 0, 'SIM: loadAlerts returns [] for non-array storage');
+
+// SLICE 5 fixes (F64-F77 backend + frontend wiring)
+ok(/function fundingAPR\(rate, intervalHours\)/.test(AJ), 'F65: fundingAPR signature accepts intervalHours');
+ok(/24 \/ hours/.test(AJ), 'F65: APR formula uses 24/hours pattern');
+ok(/fundingIntervalHours: quote\.funding_interval_hours/.test(DL), 'F65: data-live forwards funding_interval_hours');
+ok(/lo\.fundingIntervalHours/.test(AJ) && /hi\.fundingIntervalHours/.test(AJ), 'F65: HedgeBook annualizes per-leg cadence');
+ok(/l\.fundingIntervalHours/.test(AJ), 'F65: FundingPanel annualizes per-row cadence');
+
+// F69: market_id keys in FE statuses
+ok(/statusByMarketId/.test(DL), 'F69: data-live keys statuses by market_id');
+ok(/s\.market_id/.test(DL), 'F69: status payload market_id field consumed');
+
+// F70: scoped consensus
+ok(/const consInScope = structFilter === "all"/.test(AJ), 'F70: scoped consensus computed conditionally');
+ok(/structFilter !== "all" \? <span className="muted"> \(\{structFilter\}\)<\/span> : null/.test(AJ), 'F70: column header shows scope when filter active');
+
+// F73: disabled row uses getStructMeta
+ok(/const dMeta = getStructMeta\(d\.structure\)/.test(AJ), 'F73: NormTable disabled row routes through getStructMeta');
 
 // SECTIONS — Rebatify-style spot/perp split into independent sections
 ok(/function VenueSection/.test(AJ), 'SECTIONS: VenueSection helper component exists');

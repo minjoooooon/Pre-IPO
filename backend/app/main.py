@@ -219,7 +219,10 @@ def create_app() -> FastAPI:
     # would expose backend/, .claude/, screenshots/, etc. Instead, register
     # explicit handlers only for the small set of files the prototype loads.
     project_root = settings.base_dir.parent
-    _allowed_root_files = ("app.jsx", "data-live.js", "data.js", "styles.css")
+    # `data.js` was the original static-data stub; `data-live.js` replaced
+    # it and the prototype HTML no longer references data.js. Dropped from
+    # the allow-list to reduce the static-serve surface. Slice 5 F77.
+    _allowed_root_files = ("app.jsx", "data-live.js", "styles.css")
 
     if (project_root / "Pre-IPO Normalizer.html").exists():
         @app.get("/", include_in_schema=False)

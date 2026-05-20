@@ -187,11 +187,20 @@ class HyperliquidAdapter(ExchangeAdapter):
                         )
 
                     # Hyperliquid funding is per-hour (decimal fraction).
-                    # Other adapters report whatever cadence the venue uses;
-                    # the FE formats consistently per-period, so we don't
-                    # rescale here.
+                    # Slice 5 F65: the FE used to annualize every perp at 8h
+                    # cadence; now the per-row `funding_interval_hours` field
+                    # threaded through Tick → NormalizedQuote tells the FE
+                    # to use 1h here.
                     funding = _to_float(ctx.get("funding"))
-                    oi = _to_float(ctx.get("openInterest"))
+                    # HL publishes openInterest in BASE units (contract count
+                    # / underlying-share units), NOT USD — cross-checked
+                    # against dayBaseVlm × markPx ≈ dayNtlVlm. Other adapters
+                    # ship USD-denominated OI; multiply here so the
+                    # cross-venue size proxy is on consistent units. Without
+                    # this, HL was getting ~1000× under-weighted in the
+                    # consensus rollup (Slice 5 F64).
+                    oi_base = _to_float(ctx.get("openInterest"))
+                    oi_usd = oi_base * last_price if oi_base is not None else None
                     # dayNtlVlm is USD-denominated 24h notional volume.
                     vol24 = _to_float(ctx.get("dayNtlVlm"))
 
@@ -204,8 +213,9 @@ class HyperliquidAdapter(ExchangeAdapter):
                         bid=None,
                         ask=None,
                         vol24=vol24,
-                        oi=oi,
+                        oi=oi_usd,
                         funding_rate=funding,
+                        funding_interval_hours=1,
                         timestamp=ts,
                     )
                     await asyncio.sleep(POLL_INTERVAL_SECONDS)

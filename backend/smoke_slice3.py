@@ -265,7 +265,7 @@ async def test_f47_readyz():
 
     class FakeSupervisor:
         def statuses(self):
-            return [AdapterStatus(exchange="okx", state="connected", last_tick_at=time.time())]
+            return [AdapterStatus(market_id="SPACEX:okx", exchange="okx", state="connected", last_tick_at=time.time())]
     class FakeApp2:
         class state:
             aggregator = object()

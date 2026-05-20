@@ -8,6 +8,12 @@
 #   the app's own RotatingFileHandler takes over for backend/logs/app.log;
 #   bootstrap.{out,err} only catches the brief pre-logging window.
 #
+#   Slice 5 F71: after launch we sleep 2s and re-check the PID — if the
+#   child died (bind failure, import error, missing dep), we tail
+#   bootstrap.err to stderr and exit non-zero instead of leaving a stale
+#   PID file behind. Catches the "everything looked fine but nothing
+#   actually started" failure mode that bit on a fresh checkout.
+#
 #   Env vars (optional):
 #     ADMIN_TOKEN  pin the admin token across restarts (else auto-generated;
 #                  retrieve from backend/logs/admin_token.txt).
@@ -30,12 +36,14 @@ fi
 # Stale PID file (process gone) — clean up so we don't refuse to start.
 rm -f "$PID_FILE"
 
-# Prefer a project venv if present; fall back to system python3. Matches the
-# Windows pattern of running whatever `python` resolves to in PATH.
-if [[ -x "$ROOT/.venv/bin/python" ]]; then
-    PY="$ROOT/.venv/bin/python"
-elif [[ -x "$ROOT/backend/.venv/bin/python" ]]; then
+# Slice 5 F76: prefer `backend/.venv` first — that's the conventional VPS
+# location since pyproject.toml lives in backend/. The root `.venv` is more
+# often a tooling venv (ruff/black) without the app dependencies. Fall back
+# to root .venv, then system python3.
+if [[ -x "$ROOT/backend/.venv/bin/python" ]]; then
     PY="$ROOT/backend/.venv/bin/python"
+elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    PY="$ROOT/.venv/bin/python"
 else
     PY="$(command -v python3 || command -v python || true)"
 fi
@@ -50,6 +58,20 @@ nohup "$PY" -m app.main \
     2>"$LOG_DIR/bootstrap.err" &
 PID=$!
 echo "$PID" >"$PID_FILE"
+
+# Wait long enough for an import error / bind failure to actually kill the
+# child. 2s covers the OKX/Bitget/Gate/HL/BingX bootstrap fan-out timing.
+sleep 2
+
+if ! kill -0 "$PID" 2>/dev/null; then
+    echo "FAILED: pid=$PID exited within 2s of launch." >&2
+    if [[ -s "$LOG_DIR/bootstrap.err" ]]; then
+        echo "--- bootstrap.err (last 40 lines) ---" >&2
+        tail -n 40 "$LOG_DIR/bootstrap.err" >&2
+    fi
+    rm -f "$PID_FILE"
+    exit 1
+fi
 
 echo "started pid=$PID host=${HOST:-127.0.0.1} port=${PORT:-8000}"
 echo "logs:   $LOG_DIR/app.log"

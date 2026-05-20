@@ -30,6 +30,7 @@ class Aggregator:
         self._pending_flush: list[NormalizedQuote] = []
         self._flush_task: asyncio.Task | None = None
         self._retention_task: asyncio.Task | None = None
+        self._status_task: asyncio.Task | None = None
         self._statuses_cb = None  # set by lifespan: callable returning AdapterStatus[]
         self._running = False
 
@@ -55,6 +56,11 @@ class Aggregator:
                     vol24=row["vol24"],
                     oi=row["oi"],
                     funding_rate=row["funding_rate"],
+                    # funding_interval_hours isn't persisted in SQLite yet
+                    # (would be a Slice 6 schema migration); warm-up uses
+                    # the FE default of 8h. Live ticks carry the real
+                    # cadence forward via the Tick → NormalizedQuote path.
+                    funding_interval_hours=None,
                     spread_bp=None,  # not persisted; recomputed from next bid/ask
                     timestamp=row["timestamp"],
                 )
@@ -69,11 +75,12 @@ class Aggregator:
 
         self._flush_task = asyncio.create_task(self._flush_loop(), name="agg:flush")
         self._retention_task = asyncio.create_task(self._retention_loop(), name="agg:retention")
+        self._status_task = asyncio.create_task(self._status_loop(), name="agg:status")
         log.info("aggregator_started")
 
     async def stop(self) -> None:
         self._running = False
-        for t in (self._flush_task, self._retention_task):
+        for t in (self._flush_task, self._retention_task, self._status_task):
             if t is not None:
                 t.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -188,6 +195,29 @@ class Aggregator:
         while self._running:
             await asyncio.sleep(settings.tick_batch_flush_seconds)
             await self._flush_now()
+
+    async def _status_loop(self) -> None:
+        """Periodically broadcast adapter statuses to all WS subscribers.
+
+        Slice 5 F68: `broadcast_status()` existed since slice 1 but was
+        never called — the FE only saw status updates on initial snapshot
+        and on config-update broadcasts. With long-lived dashboards this
+        meant a stale/disconnected adapter never surfaced in the FE
+        FeedsCell or DISABLED chips until the operator refreshed.
+
+        Cadence matches the supervisor's `_stale_loop` (30s) — anything
+        finer would just spam clients without new information."""
+        while self._running:
+            await asyncio.sleep(settings.status_broadcast_interval_seconds)
+            if self._statuses_cb is None:
+                continue
+            try:
+                statuses = self._statuses_cb()
+                await self.broadcast_status(statuses)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                log.exception("aggregator_status_broadcast_failed", error=repr(e))
 
     async def _retention_loop(self) -> None:
         """Periodically delete ticks older than history_retention_days.

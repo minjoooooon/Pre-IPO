@@ -50,9 +50,16 @@ def _to_float(x: object) -> float | None:
     if x is None or x == "":
         return None
     try:
-        return float(x)  # type: ignore[arg-type]
+        f = float(x)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+    # Reject NaN/Inf — same guard as okx.py/bingx.py. A non-finite ticker
+    # field would otherwise propagate into normalizer math (and SQLite +
+    # WS JSON) where infinity/NaN are either rejected or silently corrupt
+    # downstream consumers.
+    if f != f or f in (float("inf"), float("-inf")):
+        return None
+    return f
 
 
 class GateAdapter(ExchangeAdapter):

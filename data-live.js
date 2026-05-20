@@ -105,6 +105,10 @@
       spread: quote.spread_bp != null ? Math.round(quote.spread_bp) : 0,
       // null for spot/mirror (no funding); decimal fraction (e.g. 0.0001) per period
       fundingRate: quote.funding_rate,
+      // Funding settlement cadence in hours — 8 for OKX/BingX, 1 for HL.
+      // The FE uses this to annualize correctly; defaults to 8 if missing
+      // (most CEX venues). Slice 5 F65.
+      fundingIntervalHours: quote.funding_interval_hours != null ? quote.funding_interval_hours : 8,
       // calibration_status passed through for FE badges
       calibrationStatus: quote.calibration_status,
       // exchange docs URL — surfaced on RATIO SOURCE cell hover/click
@@ -182,18 +186,19 @@
 
   function rebuildDisabled(statusList) {
     // Rebuild window.DISABLED from current markets + adapter statuses.
-    const statusByExchange = {};
+    // Slice 5 F69: key by `market_id` (asset_id:exchange) so 3 OKX markets
+    // sharing exchange="okx" don't all collapse to one status — the prior
+    // implementation used `exchange` as the key and let an unhealthy peer
+    // grey out healthy siblings.
+    const statusByMarketId = {};
     (statusList || []).forEach((s) => {
-      // statuses may have multiple entries per exchange (one per asset);
-      // pick the most informative non-connected state.
-      const prev = statusByExchange[s.exchange];
-      if (!prev || s.state !== "connected") {
-        statusByExchange[s.exchange] = s;
-      }
+      const mid = s && s.market_id ? s.market_id : null;
+      if (mid) statusByMarketId[mid] = s;
     });
     const next = {};
     Object.values(marketsById).forEach((m) => {
-      const st = statusByExchange[m.exchange];
+      const mid = `${m.asset_id}:${m.exchange}`;
+      const st = statusByMarketId[mid];
       const isDisabled =
         m.share_ratio == null ||
         m.ratio_source === "uncalibrated" ||

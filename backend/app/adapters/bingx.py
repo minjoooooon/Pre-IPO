@@ -123,10 +123,13 @@ class BingXAdapter(ExchangeAdapter):
         return data if isinstance(data, dict) else None
 
     async def _fetch_open_interest(self, client: httpx.AsyncClient, symbol: str) -> float | None:
-        # USDT-denominated OI is more useful than contract count; v2/quote/openInterest
-        # returns `openInterest` as a contract count + a separate `time`. We
-        # multiply by lastPrice later in stream() to get USD OI. Returns just
-        # the raw number here; None on any error so the ticker still ships.
+        # Returns BingX's published openInterest directly. Slice 5 F66:
+        # empirical probe (NCSKSPACEXV2USD-USDT: openInterest≈980K, quote
+        # volume24h≈$1.2M) confirmed the value is already USDT-denominated,
+        # NOT contract count. The prior `oi * lastPrice` multiplication
+        # squared the figure (yielding ~$2B OI on a $1M/day venue — physically
+        # impossible for a pre-IPO synthetic perp) and tilted the consensus
+        # weight toward BingX by ~1000×.
         try:
             r = await client.get(
                 f"{REST_BASE}/openApi/swap/v2/quote/openInterest",
@@ -177,13 +180,19 @@ class BingXAdapter(ExchangeAdapter):
                     # quoteVolume is already USDT-denominated 24h volume; no
                     # multiplication by price needed (unlike Bybit/some others).
                     vol24 = _to_float(ticker.get("quoteVolume"))
-                    ts_ms = _to_float(ticker.get("closeTime"))
-                    ts = ts_ms / 1000.0 if ts_ms else time.time()
+                    # Slice 5 F72: prefer poll-wallclock over BingX's
+                    # `closeTime`. closeTime is tied to BingX's internal
+                    # update cadence (sub-second but data-aligned, not poll-
+                    # aligned). Several polls in a row can return the same
+                    # closeTime and our `(market_id, timestamp)` PRIMARY KEY
+                    # in store.py would then `INSERT OR IGNORE` them away.
+                    ts = time.time()
 
                     # OI + funding are perp-only; both are best-effort (errors
                     # don't break the tick — the price is the primary signal).
-                    oi_contracts = await self._fetch_open_interest(client, market.symbol)
-                    oi_usd = oi_contracts * last_price if oi_contracts is not None else None
+                    # Slice 5 F66: openInterest is already USDT-denominated;
+                    # no multiplication.
+                    oi_usd = await self._fetch_open_interest(client, market.symbol)
                     funding_rate = await self._fetch_funding_rate(client, market.symbol)
 
                     self._last_tick_at = time.time()
@@ -196,6 +205,9 @@ class BingXAdapter(ExchangeAdapter):
                         vol24=vol24,
                         oi=oi_usd,
                         funding_rate=funding_rate,
+                        # BingX perps settle every 8h (premiumIndex returns
+                        # fundingIntervalHours=8). Slice 5 F65.
+                        funding_interval_hours=8,
                         timestamp=ts,
                     )
                     await asyncio.sleep(POLL_INTERVAL_SECONDS)

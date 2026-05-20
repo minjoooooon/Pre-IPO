@@ -219,9 +219,14 @@ function getFundingHistory(assetId, ex) {
   const f = (typeof window !== "undefined" && window.FUNDING) || {};
   return (f[assetId] && f[assetId][ex]) || null;
 }
-function fundingAPR(rate) {
-  // OKX funding settles every 8h → 3 settlements/day → 1095/yr
-  return rate * 3 * 365;
+function fundingAPR(rate, intervalHours) {
+  // Annualize a per-period funding rate. Most CEX perps (OKX, BingX) settle
+  // every 8h → 3 settlements/day → 1095/yr. Hyperliquid settles every 1h
+  // → 24/day → 8760/yr. Defaulting to 8h preserves the original behavior
+  // for callers that don't yet thread the cadence through. Slice 5 F65.
+  const hours = (intervalHours && intervalHours > 0) ? intervalHours : 8;
+  const settlements_per_year = (24 / hours) * 365;
+  return rate * settlements_per_year;
 }
 
 // ============================================================
@@ -239,8 +244,10 @@ function buildHedgeBook(rows, assetId) {
       const loFund = lo.structure === "perp" ? getFundingRate(lo) : null;
       const hiFund = hi.structure === "perp" ? getFundingRate(hi) : null;
       // long pays positive funding on its leg, short receives positive funding on its leg
-      const longCarryApr  = loFund == null ? 0 : -fundingAPR(loFund) * 100;
-      const shortCarryApr = hiFund == null ? 0 :  fundingAPR(hiFund) * 100;
+      // Thread per-venue funding cadence through so HL legs annualize at 24/365
+      // while OKX/BingX legs use 3/365. Both legs may have different intervals.
+      const longCarryApr  = loFund == null ? 0 : -fundingAPR(loFund, lo.fundingIntervalHours) * 100;
+      const shortCarryApr = hiFund == null ? 0 :  fundingAPR(hiFund, hi.fundingIntervalHours) * 100;
       const netFundingApr = longCarryApr + shortCarryApr;
       const minConf = Math.min(lo.confidence, hi.confidence);
       // structure-mismatch flag
@@ -908,6 +915,29 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
   const filteredRows = applyStructFilter(norm.rows, structFilter);
   const filteredDisabled = applyStructFilter(allDisabled, structFilter);
 
+  // When the user narrows to SPOT or PERP, the "vs CONS." column should
+  // compare against the in-scope consensus, not the full-set one. Slice 5
+  // F70: previously a PERP filter showed perps measured against a consensus
+  // that included spot/mirror rows pulling 5-35% lower (or vice versa), so
+  // every row looked uniformly off-side. The KPI strip above still uses
+  // the full-set norm.consensus on purpose — it documents the cross-class
+  // picture, not the in-scope one.
+  const consInScope = structFilter === "all"
+    ? norm.consensus
+    : (() => {
+        // Mirror normalize()'s weighting: confidence × sqrt(max(oi, vol24, 1))
+        let wsum = 0, vsum = 0;
+        filteredRows.forEach((r) => {
+          const size = (r.oi && r.oi > 0) ? r.oi : (r.vol24 || 0);
+          const w = (r.confidence / 100) * Math.sqrt(Math.max(size, 1));
+          if (isFinite(r.impliedFDV)) {
+            wsum += w;
+            vsum += w * r.impliedFDV;
+          }
+        });
+        return wsum > 0 ? vsum / wsum : 0;
+      })();
+
   // keep draft in sync when asset changes externally
   useEffect(() => {
     setSharesDraft((asset.fdvShares/1e9).toFixed(2));
@@ -1024,7 +1054,14 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
               <th className="r">IMPLIED $/SH</th>
               <th className="r">IMPLIED FDV</th>
               <th className="r">vs REF</th>
-              <th className="r">vs CONS.</th>
+              <th
+                className="r"
+                title={structFilter === "all"
+                  ? "Premium vs full-set consensus FDV (weighted by conf × sqrt(size))"
+                  : `Premium vs ${structFilter.toUpperCase()}-only consensus FDV (filter-scoped)`}
+              >
+                vs CONS.{structFilter !== "all" ? <span className="muted"> ({structFilter})</span> : null}
+              </th>
               <th className="r">24H VOL</th>
               <th className="r">OI</th>
               <th className="r">SPRD bp</th>
@@ -1033,7 +1070,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
           </thead>
           <tbody>
             {[...filteredRows].sort((a,b)=>b.impliedFDV-a.impliedFDV).map((r,i)=> {
-              const prem = safeRatioPct(r.impliedFDV, norm.consensus);
+              const prem = safeRatioPct(r.impliedFDV, consInScope);
               const premRef = safeRatioPct(r.impliedFDV, asset.lastRound.valuation);
               return (
                 <tr key={r.ex}>
@@ -1109,7 +1146,13 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                 </tr>
               );
             })}
-            {filteredDisabled.map((d) => (
+            {filteredDisabled.map((d) => {
+              // Slice 5 F73: route through getStructMeta so a future BE-only
+              // Structure literal degrades to the neutral fallback object
+              // here too, not just in the live-row branch. Same fallback
+              // contract as STRUCT_META[r.structure] callers.
+              const dMeta = getStructMeta(d.structure);
+              return (
               <tr key={"dis-"+d.ex} className="ntable-row-disabled">
                 <td className="l">
                   <div className="venue-cell">
@@ -1121,10 +1164,8 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                   </div>
                 </td>
                 <td className="l">
-                  <span className={"struct-pill tone-"+(STRUCT_META[d.structure]?.tone || "neutral")}>
-                    {STRUCT_META[d.structure]?.sym || "?"}
-                  </span>
-                  <span className="struct-label muted">{STRUCT_META[d.structure]?.label || d.structure}</span>
+                  <span className={"struct-pill tone-"+dMeta.tone}>{dMeta.sym}</span>
+                  <span className="struct-label muted">{dMeta.label}</span>
                 </td>
                 <td className="r mono muted">—</td>
                 <td className="r mono muted">—</td>
@@ -1157,7 +1198,8 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                   </span>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1254,7 +1296,7 @@ function FundingPanel({ assetId, listings }) {
     const isPerp = l.structure === "perp";
     // funding_rate from BE (OKX funding-rate channel). null for spot/mirror.
     const r = isPerp ? getFundingRate(l) : null;
-    const apr = r == null ? null : fundingAPR(r);
+    const apr = r == null ? null : fundingAPR(r, l.fundingIntervalHours);
     const hist = isPerp ? getFundingHistory(assetId, l.ex) : null;
     return { ...l, fundingR: r, fundingAPR: apr, hist };
   });
@@ -1267,7 +1309,7 @@ function FundingPanel({ assetId, listings }) {
     <div className="panel">
       <PanelHead
         title="FUNDING & CARRY"
-        sub="Perp instruments only · 8h intervals · positive = longs pay shorts"
+        sub="Perp instruments only · per-venue settlement cadence (OKX/BingX 8h, HL 1h) · positive = longs pay shorts"
         right={
           <div className="countdown mono">
             <span className="muted">NEXT FUNDING</span>

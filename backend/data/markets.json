@@ -51,7 +51,7 @@
       "share_ratio": 5.14,
       "ratio_source": "back-solved",
       "ratio_reference_fdv": 1500000000000.0,
-      "ratio_calibrated_at": "2026-05-20T03:00:00Z",
+      "ratio_calibrated_at": "2026-04-15T00:00:00Z",
       "confidence": 65,
       "doc_url": "https://www.bitget.com/academy/bitget-first-ipo-prime-spacex-ipo-valuation-starlink-growth-analysis",
       "notes": "[recalibrated 2026-05-20] Bitget IPO Prime preSPAX subscription published 1 preSPAX = $650, total supply 94,000, 'implying SpaceX valuation $1.5T' (sale 14,435 participants / $177M / 3x oversubscribed). Republic is the regulated issuer; preSPAX 'tracks economic performance of SpaceX post-IPO' — the 1:1 with public stock applies AT/AFTER conversion, NOT to the pre-IPO mirror price. Bitget does not publish an explicit share-count denominator; back-solve from subscription anchor: implicit_basis = 1.5T / 650 ≈ 2.308B; share_ratio = fully_diluted_shares / implicit_basis = 11.87B / 2.308B ≈ 5.14. Sanity: at P=$650 → implied_FDV = (650/5.14)*11.87B ≈ $1.501T ✓. Live: REST GET https://api.bitget.com/api/v2/spot/market/tickers?symbol=PRESPAXUSDT. Probe 2026-05-20: last=$818.27, 24h change=-2.01%, vol24h(USDT)=$541,618 → implied FDV ≈ $1.89T (cross-checks against Gate $1.87T to within ~1%). Trigger for recalibration: when SpaceX files S-1 or IPO completes, Republic mirror converts 1:1 to actual public shares — bump share_ratio to fully_diluted_shares / actual_post-IPO_share_count and refresh ratio_calibrated_at."
@@ -65,7 +65,7 @@
       "share_ratio": 5.01,
       "ratio_source": "back-solved",
       "ratio_reference_fdv": 1400000000000.0,
-      "ratio_calibrated_at": "2026-05-20T02:00:00Z",
+      "ratio_calibrated_at": "2026-04-20T00:00:00Z",
       "confidence": 65,
       "doc_url": "https://www.gate.com/learn/articles/what-is-spacex-spcx",
       "notes": "[calibrated 2026-05-20] Gate Pre-IPOs SPCX is a Mirror Note / Contingent Payout Note (per Gate Learn). Subscription phase (2026-04-20 to 04-22): 1 SPCX = $590, total supply = 33,900 SPCX (raise ≈ $20.001M), Gate stated 'implying a valuation of approximately $1.4 trillion'. Distribution 2026-05-06 (100% unlock), 24/7 pre-market trade thereafter. Gate does not publish an explicit share count denominator, so the ratio is back-solved from the subscription anchor: implicit_basis = 1.4T / 590 ≈ 2.373B shares; share_ratio = fully_diluted_shares / implicit_basis = 11.87B / 2.373B ≈ 5.01. Sanity: at token P, our normalizer = (P/5.01) * 11.87B = P * 2.373B, which equals Gate's anchor at P=590 → $1.4T ✓. Live data: REST GET https://api.gateio.ws/api/v4/spot/tickers?currency_pair=SPCX_USDT (response is an array of {currency_pair, last, highest_bid, lowest_ask, quote_volume, base_volume, high_24h, low_24h, change_percentage}). Public WS available at wss://api.gateio.ws/ws/v4/ channel spot.tickers if polling becomes insufficient. Probe 2026-05-20: last=$789.23, vol24h=$697,735, change_24h=-3.14% → implied FDV ≈ $1.87T."
@@ -163,7 +163,7 @@
       "share_ratio": 5.14,
       "ratio_source": "market-fitted",
       "ratio_reference_fdv": 1500000000000.0,
-      "ratio_calibrated_at": "2026-05-20T14:00:00Z",
+      "ratio_calibrated_at": "2026-04-15T00:00:00Z",
       "confidence": 40,
       "doc_url": "https://bingx.com/en/pre-stocks",
       "notes": "[discover 2026-05-20] BingX PreStocks (BingX's own pre-IPO perp, distinct from the VNTL-mirror). displayName 'SPACEX(PreStocks)-USDT'. Live data: GET https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=NCSKSPACEXP2USD-USDT. Probe 2026-05-20: last=$796.25, vol24=$1.49M, OI~$732M (much deeper than Bitget $540K / Gate $700K vol24). PreStocks doesn't publish an explicit share-count denominator; price clusters tightly with Republic-anchored venues (Bitget preSPAX $818, Gate SPCX $789), so back-solve from the same Republic anchor: implicit_basis = 1.5T / 650 ≈ 2.308B; share_ratio = 11.87B / 2.308B ≈ 5.14. Sanity at $796.25: implied_FDV = (796.25/5.14)*11.87B ≈ $1.838T (consistent with Bitget $818 → $1.888T / Gate $789 → $1.872T). Exchange key 'bingx-prestocks' (not 'bingx') keeps it routable independently from the VNTL row; both use the same BingXAdapter via the bingx _ADAPTER_CLASSES key — see hyperliquid hl-xyz/hl-vntl precedent. Trigger for recalibration: BingX publishing an official basis OR SpaceX S-1 filing."

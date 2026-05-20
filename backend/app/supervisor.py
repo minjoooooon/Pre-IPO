@@ -36,7 +36,11 @@ class _SupervisedAdapter:
     status: AdapterStatus = field(init=False)
 
     def __post_init__(self) -> None:
-        self.status = AdapterStatus(exchange=self.adapter.exchange_id, state="disconnected")
+        self.status = AdapterStatus(
+            market_id=self.market.market_id,
+            exchange=self.market.exchange,
+            state="disconnected",
+        )
 
 
 class Supervisor:
@@ -61,6 +65,7 @@ class Supervisor:
         for sa in self._adapters:
             if sa.market.market_id == market_id:
                 sa.status = AdapterStatus(
+                    market_id=sa.market.market_id,
                     exchange=sa.market.exchange,
                     state="disabled",
                     last_error=reason,
@@ -104,7 +109,8 @@ class Supervisor:
             # badge keep showing the most recent crash reason until the next
             # one supersedes it.
             sa.status = AdapterStatus(
-                exchange=sa.adapter.exchange_id,
+                market_id=sa.market.market_id,
+                exchange=sa.market.exchange,
                 state="connected",
                 last_tick_at=sa.status.last_tick_at,
                 reconnect_count=sa.status.reconnect_count,

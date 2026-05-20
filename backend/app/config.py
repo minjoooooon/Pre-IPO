@@ -69,6 +69,10 @@ class Settings(BaseModel):
     history_max_rows: int = 100_000
     # Period between TickStore retention sweeps (6h).
     retention_cleanup_interval_seconds: int = 21_600
+    # Period between adapter-status broadcasts to WS subscribers. Slice 5
+    # F68: previously statuses only flowed on snapshot/config-update, so
+    # the FeedsCell badge could sit stale for hours after a disconnect.
+    status_broadcast_interval_seconds: int = 30
 
     # ring buffer
     ring_buffer_points: int = 96

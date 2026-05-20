@@ -346,6 +346,9 @@ class OkxAdapter(ExchangeAdapter):
             vol24=vol24_usd,
             oi=oi_usd,
             funding_rate=state.funding_rate,
+            # OKX perps settle funding every 8h (per OKX docs). Slice 5 F65:
+            # tag the cadence so the FE doesn't default-annualize wrongly.
+            funding_interval_hours=8,
             timestamp=state.last_ticker_ts or time.time(),
         )
 

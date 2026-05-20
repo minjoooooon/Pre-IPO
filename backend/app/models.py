@@ -69,6 +69,11 @@ class Tick(BaseModel):
     vol24: float | None = None
     oi: float | None = None
     funding_rate: float | None = None
+    # Funding settlement cadence in hours (8 for OKX/BingX/most CEX,
+    # 1 for Hyperliquid). Used by the FE to annualize correctly; None
+    # means "spot / no funding leg" so the FE skips APR rendering.
+    # Slice 5 F65.
+    funding_interval_hours: int | None = None
     timestamp: float  # unix seconds (UTC)
 
 
@@ -87,11 +92,18 @@ class NormalizedQuote(BaseModel):
     vol24: float | None = None
     oi: float | None = None
     funding_rate: float | None = None
+    funding_interval_hours: int | None = None
     spread_bp: float | None = None
     timestamp: float
 
 
 class AdapterStatus(BaseModel):
+    # `market_id` (asset_id:exchange) is the identifier the FE keys on so
+    # multiple markets sharing the same exchange (3× OKX, 3× BingX, 2× HL)
+    # don't collapse to a single status. Slice 5 F69. The `exchange` field
+    # stays for back-compat — older FE clients reading by exchange still
+    # work, just lossy.
+    market_id: str
     exchange: str
     state: AdapterState
     last_tick_at: float | None = None

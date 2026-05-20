@@ -48,6 +48,7 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
             vol24=tick.vol24,
             oi=tick.oi,
             funding_rate=tick.funding_rate,
+            funding_interval_hours=tick.funding_interval_hours,
             spread_bp=spread_bp,
             timestamp=tick.timestamp,
         )
@@ -66,6 +67,7 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
         vol24=tick.vol24,
         oi=tick.oi,
         funding_rate=tick.funding_rate,
+        funding_interval_hours=tick.funding_interval_hours,
         spread_bp=spread_bp,
         timestamp=tick.timestamp,
     )
