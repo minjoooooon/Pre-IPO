@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
 from .adapters.gate import GateAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
@@ -96,6 +97,13 @@ _ADAPTER_CLASSES = {
     "okx": OkxAdapter,
     "bitget": BitgetAdapter,
     "gate": GateAdapter,
+    # BingX lists two distinct pre-IPO products under one platform — Ventuals-
+    # mirror valuation perps (V2 suffix) and BingX-native PreStocks (P2). They
+    # share the BingXAdapter class but get distinct exchange keys so the
+    # supervisor registers them as independent markets (same trick as
+    # hyperliquid hl-xyz / hl-vntl above).
+    "bingx": BingXAdapter,
+    "bingx-prestocks": BingXAdapter,
 }
 
 

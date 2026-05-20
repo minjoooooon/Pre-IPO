@@ -139,6 +139,48 @@
       "confidence": 30,
       "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals",
       "notes": "[discover 2026-05-20] HIP-3 builder-deployed perp on dex='vntl' (Ventuals; deployer=0x8888888192a4a0593c13532ba48449fc24c3beda). Live data: POST https://api.hyperliquid.xyz/info {\"type\":\"allMids\",\"dex\":\"vntl\"} → {\"vntl:ANTHROPIC\":\"<mid>\", ...}. Probe 2026-05-20: mid=$1195.7. share_ratio=1.79 mirrors the SPACEX hl-vntl pattern (basis=1B; share_ratio = fully_diluted_shares / 1B = 1.79B / 1B), NOT a published spec — confidence=30, ratio_source=market-fitted. Sanity at $1195.7: implied_FDV = (1195.7/1.79)*1.79B ≈ $1.20T (~6.5x vs $183B Feb-2026 Series F; AI hype premium). Confirm/recalibrate when Ventuals publishes oracle methodology."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "bingx",
+      "symbol": "NCSKSPACEXV2USD-USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 11.87,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T14:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://bingx.com/en/pre-stocks",
+      "notes": "[discover 2026-05-20] BingX Standard Futures pre-IPO segment ('NCSK*' prefix; displayName 'SPACEX(VNTL)-USDT'). Mirrors the Ventuals oracle methodology (1B-basis valuation perp), same family as Hyperliquid hl-vntl. Live data: GET https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=NCSKSPACEXV2USD-USDT → {lastPrice, bidPrice, askPrice, quoteVolume, ...}. Probe 2026-05-20: last=$2129.7, vol24=$1.22M; cross-checks within 0.2% of hl-vntl $2125.1 (same Ventuals index). share_ratio=11.87 (basis=1B; fdv_shares/1B = 11.87B/1B). Confidence bumped to 40 (vs hl-vntl's 30) because two venues now agree on the basis. Rebatify-listed as 'BingX V2 valuation perp'. Trigger for recalibration: divergence from hl-vntl >5% sustained for >30min suggests basis change."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "bingx-prestocks",
+      "symbol": "NCSKSPACEXP2USD-USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 5.14,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": 1500000000000.0,
+      "ratio_calibrated_at": "2026-05-20T14:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://bingx.com/en/pre-stocks",
+      "notes": "[discover 2026-05-20] BingX PreStocks (BingX's own pre-IPO perp, distinct from the VNTL-mirror). displayName 'SPACEX(PreStocks)-USDT'. Live data: GET https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=NCSKSPACEXP2USD-USDT. Probe 2026-05-20: last=$796.25, vol24=$1.49M, OI~$732M (much deeper than Bitget $540K / Gate $700K vol24). PreStocks doesn't publish an explicit share-count denominator; price clusters tightly with Republic-anchored venues (Bitget preSPAX $818, Gate SPCX $789), so back-solve from the same Republic anchor: implicit_basis = 1.5T / 650 ≈ 2.308B; share_ratio = 11.87B / 2.308B ≈ 5.14. Sanity at $796.25: implied_FDV = (796.25/5.14)*11.87B ≈ $1.838T (consistent with Bitget $818 → $1.888T / Gate $789 → $1.872T). Exchange key 'bingx-prestocks' (not 'bingx') keeps it routable independently from the VNTL row; both use the same BingXAdapter via the bingx _ADAPTER_CLASSES key — see hyperliquid hl-xyz/hl-vntl precedent. Trigger for recalibration: BingX publishing an official basis OR SpaceX S-1 filing."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "bingx",
+      "symbol": "NCSKOPENAIV2USD-USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T14:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://bingx.com/en/pre-stocks",
+      "notes": "[discover 2026-05-20] BingX VNTL-mirror valuation perp ('OPENAI(VNTL)-USDT', symbol NCSKOPENAIV2USD-USDT). Same Ventuals 1B-basis methodology as SPACEX(VNTL). Live data: GET https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=NCSKOPENAIV2USD-USDT. Probe 2026-05-20: last=$1181.7, vol24=$6.23M (deepest OpenAI venue we track). share_ratio=2.4 (basis=1B; 2.4B/1B). Sanity at $1181.7: implied_FDV = (1181.7/2.4)*2.4B ≈ $1.182T (~2.4x vs $500B Oct-2025 tender; cross-checks within 0.1% of hl-vntl OPENAI $1180.3). Trigger for recalibration: divergence from hl-vntl >5%. Note ANTHROPIC is NOT yet listed on BingX as of probe date."
     }
   ]
 }
