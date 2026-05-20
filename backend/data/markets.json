@@ -76,13 +76,13 @@
       "symbol": "OPENAI-USDT-SWAP",
       "venue": "CEX",
       "structure": "perp",
-      "share_ratio": 1.0,
-      "ratio_source": "market-fitted",
-      "ratio_reference_fdv": 500000000000.0,
-      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
-      "confidence": 40,
-      "doc_url": "https://www.okx.com/docs-v5/en/",
-      "notes": "Probe 2026-05-18: ctVal=1, ctValCcy=OPENAI, state=live. last~$1386. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=OPENAI, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $500B from assets.json last_round.valuation. Override via /api/admin if needed."
+      "share_ratio": 2.4,
+      "ratio_source": "official",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T13:00:00Z",
+      "confidence": 75,
+      "doc_url": "https://www.okx.com/en-us/help/okx-to-list-pre-ipo-pre-market-perpetual-futures-for-spacex-usdt-openai-usdt-and-anthropic-usdt",
+      "notes": "[recalibrated 2026-05-20] Same OKX pre-IPO perp announcement that documents SPACEX (\"Estimated share count: 1,000,000,000\" and \"1 token ≈ 1/1,000,000,000 of the company's market cap\"). 1B-basis applies to all three (SPACEX/OPENAI/ANTHROPIC) per the joint listing. Derivation: share_ratio = fully_diluted_shares / 1B = 2.4B / 1B = 2.4. Sanity: at token P, OKX-intended FDV = P * 1B; our normalizer = (P / 2.4) * 2.4B = P * 1B. ✓ Prior calibration (ratio=1.0, source=market-fitted, conf=40) misread ctVal=1 as \"1 contract = 1 share\" - the literal interpretation, but the announcement supersedes the instrument metadata. Trigger for recalibration: when OpenAI files S-1 / IPO completes, OKX will rebase 1 token ≈ 1 actual share post-rebase - bump share_ratio to fully_diluted_shares / post-rebase_basis and update ratio_calibrated_at."
     },
     {
       "asset_id": "OPENAI",
@@ -104,13 +104,41 @@
       "symbol": "ANTHROPIC-USDT-SWAP",
       "venue": "CEX",
       "structure": "perp",
-      "share_ratio": 1.0,
+      "share_ratio": 1.79,
+      "ratio_source": "official",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T13:00:00Z",
+      "confidence": 75,
+      "doc_url": "https://www.okx.com/en-us/help/okx-to-list-pre-ipo-pre-market-perpetual-futures-for-spacex-usdt-openai-usdt-and-anthropic-usdt",
+      "notes": "[recalibrated 2026-05-20] Same OKX joint pre-IPO perp announcement as SPACEX/OPENAI. 1B-basis applies to all three. Derivation: share_ratio = fully_diluted_shares / 1B = 1.79B / 1B = 1.79. Sanity: at token P, OKX-intended FDV = P * 1B; normalizer = (P / 1.79) * 1.79B = P * 1B. ✓ Prior calibration (ratio=1.0, source=market-fitted, conf=40) misread ctVal=1 as \"1 contract = 1 share\". Trigger for recalibration: when Anthropic files S-1, OKX will rebase to actual share count; bump share_ratio accordingly."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "hl-vntl",
+      "symbol": "vntl:OPENAI",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
       "ratio_source": "market-fitted",
-      "ratio_reference_fdv": 183000000000.0,
-      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
-      "confidence": 40,
-      "doc_url": "https://www.okx.com/docs-v5/en/",
-      "notes": "Probe 2026-05-18: ctVal=1, ctValCcy=ANTHROPIC, state=live. last~$1598. | [calibrated 2026-05-18] OKX SWAP instrument metadata reports ctVal=1, ctValCcy=ANTHROPIC, ctMult=1 - literal interpretation = 1 contract represents 1 share unit. Reference FDV anchor: $183B from assets.json last_round.valuation. Override via /api/admin if needed."
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T13:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals",
+      "notes": "[discover 2026-05-20] HIP-3 builder-deployed perp on dex='vntl' (Ventuals; deployer=0x8888888192a4a0593c13532ba48449fc24c3beda). Live data: POST https://api.hyperliquid.xyz/info {\"type\":\"allMids\",\"dex\":\"vntl\"} → {\"vntl:OPENAI\":\"<mid>\", ...}. Probe 2026-05-20: mid=$1180.3. share_ratio=2.4 mirrors the SPACEX hl-vntl pattern (basis=1B; share_ratio = fully_diluted_shares / 1B = 2.4B / 1B), NOT a published spec — confidence=30, ratio_source=market-fitted. Sanity at $1180.3: implied_FDV = (1180.3/2.4)*2.4B ≈ $1.18T (~2.4x vs $500B Oct-2025 tender; hot AI sector premium, consistent with OKX/Bitget pricing). Confirm/recalibrate when Ventuals publishes oracle methodology."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "hl-vntl",
+      "symbol": "vntl:ANTHROPIC",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 1.79,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-20T13:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals",
+      "notes": "[discover 2026-05-20] HIP-3 builder-deployed perp on dex='vntl' (Ventuals; deployer=0x8888888192a4a0593c13532ba48449fc24c3beda). Live data: POST https://api.hyperliquid.xyz/info {\"type\":\"allMids\",\"dex\":\"vntl\"} → {\"vntl:ANTHROPIC\":\"<mid>\", ...}. Probe 2026-05-20: mid=$1195.7. share_ratio=1.79 mirrors the SPACEX hl-vntl pattern (basis=1B; share_ratio = fully_diluted_shares / 1B = 1.79B / 1B), NOT a published spec — confidence=30, ratio_source=market-fitted. Sanity at $1195.7: implied_FDV = (1195.7/1.79)*1.79B ≈ $1.20T (~6.5x vs $183B Feb-2026 Series F; AI hype premium). Confirm/recalibrate when Ventuals publishes oracle methodology."
     }
   ]
 }
