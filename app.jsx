@@ -26,7 +26,10 @@ const splitUSDUnit = (n) => {
   return { num: Number(n).toFixed(2), unit: "" };
 };
 const fmtNum = (n, d=2) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtPct = (n, d=2) => (n>=0?"+":"") + n.toFixed(d) + "%";
+const fmtPct = (n, d=2) => {
+  if (n == null || !isFinite(n)) return "—";
+  return (n>=0?"+":"") + n.toFixed(d) + "%";
+};
 
 // Premium display: small % stays as %, huge ones switch to multiplier.
 // e.g. +85.4% → "+85.4%"  but  +2210.9% → "+23.11x"
@@ -82,8 +85,36 @@ const SRC_META = {
   "official":      { dot: "good",    label: "Official" },
   "whitepaper":    { dot: "neutral", label: "Whitepaper" },
   "back-solved":   { dot: "warn",    label: "Back-solved" },
-  "market-fitted": { dot: "bad",     label: "Market-fitted" }
+  "market-fitted": { dot: "bad",     label: "Market-fitted" },
+  "uncalibrated":  { dot: "bad",     label: "Uncalibrated" }
 };
+
+// Safe lookups so a future BE Pydantic literal (Structure or RatioSource)
+// shipped before the FE has a matching meta entry degrades to a neutral
+// fallback row instead of TypeError-ing the whole table (see MEMORY.md
+// "BE/FE enum lockstep").
+function getStructMeta(s) {
+  return STRUCT_META[s] || { sym: "?", tone: "neutral", label: s || "unknown" };
+}
+function getSrcMeta(s) {
+  return SRC_META[s] || { dot: "neutral", label: s || "unknown" };
+}
+
+// safePct: divide-only helper that returns null when the denominator is not
+// strictly positive or finite. fmtPremium / fmtPct already render "—" for
+// null inputs (via fmtPct → null check), so consumers can swap safePct in
+// freely. Used to keep `(Implied - ref) / ref * 100` from emitting Infinity
+// when reference data is missing / zero.
+function safePct(num, denom) {
+  if (denom == null || !isFinite(denom) || denom <= 0) return null;
+  if (num == null || !isFinite(num)) return null;
+  return ((num - denom) / denom) * 100;
+}
+function safeRatioPct(num, denom) {
+  if (denom == null || !isFinite(denom) || denom <= 0) return null;
+  if (num == null || !isFinite(num)) return null;
+  return ((num / denom) - 1) * 100;
+}
 
 // ============================================================
 // funding helpers — REAL data from backend.
@@ -187,10 +218,7 @@ function TopBar({ now, asset }) {
         </nav>
       </div>
       <div className="topbar-right">
-        <div className="status-cell">
-          <span className="status-dot pulse" />
-          <span className="status-label">LIVE</span>
-        </div>
+        <ConnStatusCell/>
         <div className="status-cell mono">
           <span className="muted">UTC</span>
           <span>{fmtTime(now)}</span>
@@ -210,6 +238,32 @@ function TopBar({ now, asset }) {
         </button>
       </div>
     </header>
+  );
+}
+
+function ConnStatusCell() {
+  // Drive the LIVE/RECONNECTING label off the actual WS state instead of a
+  // static pulse — operators were seeing "LIVE" + footer "WS RECONNECTING"
+  // at the same time during reconnect storms.
+  const [, force] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => force((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const live = (typeof window !== "undefined" && window.PRE_IPO_LIVE) || { connected: false };
+  if (live.connected) {
+    return (
+      <div className="status-cell">
+        <span className="status-dot pulse" />
+        <span className="status-label">LIVE</span>
+      </div>
+    );
+  }
+  return (
+    <div className="status-cell">
+      <span className="status-dot status-dot-bad" />
+      <span className="status-label bad">RECONNECTING</span>
+    </div>
   );
 }
 
@@ -240,7 +294,7 @@ function AssetRail({ assets, selectedId, onSelect, normMap }) {
       <div className="rail-list">
         {assets.map(a => {
           const n = normMap[a.id];
-          const drift = ((n.consensus - a.lastRound.valuation) / a.lastRound.valuation) * 100;
+          const drift = safePct(n.consensus, a.lastRound.valuation);
           const up = a.delta24h >= 0;
           return (
             <button
@@ -258,7 +312,7 @@ function AssetRail({ assets, selectedId, onSelect, normMap }) {
               <div className="rail-row-bot">
                 <span className="mono">${fmtUSD(n.consensus)}</span>
                 <span
-                  className={"mono " + (drift>=0?"ok":"bad")}
+                  className={"mono " + (drift == null ? "muted" : drift >= 0 ? "ok" : "bad")}
                   title={`Implied FDV ${fmtPremium(drift)} vs $${fmtUSD(a.lastRound.valuation)} round (${a.lastRound.date})`}
                 >
                   vs ref {fmtPremium(drift)}
@@ -312,12 +366,12 @@ function Sparkline({ points, positive }) {
 // ============================================================
 function AssetHeader({ asset, norm }) {
   const refFdv = asset.lastRound.valuation;
-  const driftPct = ((norm.consensus - refFdv) / refFdv) * 100;
-  const gapUSD = norm.consensus - refFdv;
+  const driftPct = safePct(norm.consensus, refFdv);
+  const gapUSD = (isFinite(norm.consensus) && isFinite(refFdv)) ? (norm.consensus - refFdv) : null;
   const up = asset.delta24h >= 0;
-  const premUp = driftPct >= 0;
+  const premUp = driftPct == null ? true : driftPct >= 0;
   const refUnit = splitUSDUnit(refFdv);
-  const gapUnit = splitUSDUnit(Math.abs(gapUSD));
+  const gapUnit = gapUSD == null ? { num: "—", unit: "" } : splitUSDUnit(Math.abs(gapUSD));
   return (
     <section className="asset-head">
       <div className="asset-head-left">
@@ -367,41 +421,53 @@ function AssetHeader({ asset, norm }) {
 // ============================================================
 function KPIStrip({ asset, norm }) {
   const refFdv = asset.lastRound.valuation;
-  const consVsRef = ((norm.consensus - refFdv) / refFdv) * 100;
+  const consVsRef = safePct(norm.consensus, refFdv);
+  const hasRows = norm && norm.max != null && norm.min != null && norm.rows && norm.rows.length > 0;
+  const maxImplied = hasRows ? norm.max.impliedFDV : null;
+  const minImplied = hasRows ? norm.min.impliedFDV : null;
+  const highVsCons = hasRows ? safeRatioPct(maxImplied, norm.consensus) : null;
+  const lowVsCons  = hasRows ? safeRatioPct(minImplied, norm.consensus) : null;
+  const spread = hasRows && isFinite(norm.spread) ? norm.spread : null;
   const items = [
     {
       label: "Consensus FDV",
       sub: "vol·conf weighted",
       value: "$" + fmtUSD(norm.consensus),
       foot: (
-        <span className={consVsRef >= 0 ? "ok" : "bad"}>
+        <span className={consVsRef == null ? "muted" : consVsRef >= 0 ? "ok" : "bad"}>
           {fmtPremium(consVsRef)} <span className="muted">vs ref</span>
         </span>
       )
     },
     {
       label: "High venue",
-      sub: norm.max.ex,
-      value: "$" + fmtUSD(norm.max.impliedFDV),
-      foot: <span className="ok">+{((norm.max.impliedFDV/norm.consensus-1)*100).toFixed(2)}% vs cons.</span>
+      sub: hasRows ? norm.max.ex : "—",
+      value: hasRows ? ("$" + fmtUSD(maxImplied)) : "—",
+      foot: hasRows
+        ? <span className="ok">{fmtPct(highVsCons)} vs cons.</span>
+        : <span className="muted">no data</span>
     },
     {
       label: "Low venue",
-      sub: norm.min.ex,
-      value: "$" + fmtUSD(norm.min.impliedFDV),
-      foot: <span className="bad">{((norm.min.impliedFDV/norm.consensus-1)*100).toFixed(2)}% vs cons.</span>
+      sub: hasRows ? norm.min.ex : "—",
+      value: hasRows ? ("$" + fmtUSD(minImplied)) : "—",
+      foot: hasRows
+        ? <span className="bad">{fmtPct(lowVsCons)} vs cons.</span>
+        : <span className="muted">no data</span>
     },
     {
       label: "Spread (hi–lo)",
       sub: "normalized FDV",
-      value: norm.spread.toFixed(2) + "%",
-      foot: <span className="muted">{fmtUSD(norm.max.impliedFDV-norm.min.impliedFDV)} gap</span>
+      value: spread != null ? spread.toFixed(2) + "%" : "—",
+      foot: hasRows
+        ? <span className="muted">{fmtUSD(maxImplied - minImplied)} gap</span>
+        : <span className="muted">—</span>
     },
     {
       label: "Avg confidence",
-      sub: norm.rows.length + " venues",
-      value: norm.avgConf.toFixed(0) + "/100",
-      foot: <ConfBar value={norm.avgConf} />
+      sub: (norm.rows ? norm.rows.length : 0) + " venues",
+      value: (norm.avgConf || 0).toFixed(0) + "/100",
+      foot: <ConfBar value={norm.avgConf || 0} />
     },
     {
       label: "FDV shares",
@@ -447,7 +513,19 @@ function ValuationChart({ asset, listings, series, norm }) {
 
   // collect all values for y-range
   const allVals = [];
-  listings.forEach(l => { (series[l.ex] || []).forEach(v => allVals.push(v)); });
+  listings.forEach(l => { (series[l.ex] || []).forEach(v => { if (v != null && isFinite(v)) allVals.push(v); }); });
+  if (allVals.length === 0) {
+    // Math.min(...[]) === Infinity; subsequent yOf would emit NaN. Bail out
+    // with a placeholder until warm-up history arrives.
+    return (
+      <div className="panel chart-panel">
+        <PanelHead title="IMPLIED FDV — 24H INTRADAY" sub="Normalized to USD; each line = 1 venue's instrument"/>
+        <div className="chart-wrap" style={{padding:"32px",color:"var(--tx-2)"}}>
+          Waiting for tick history…
+        </div>
+      </div>
+    );
+  }
   const yMin = Math.min(...allVals) * 0.985;
   const yMax = Math.max(...allVals) * 1.015;
 
@@ -510,14 +588,18 @@ function ValuationChart({ asset, listings, series, norm }) {
           {/* paths */}
           {listings.map((l,i)=> {
             const pts = series[l.ex];
-            if (!pts) return null;
+            if (!pts || pts.length === 0) return null;
             const d = pts.map((p,k)=>`${k===0?"M":"L"}${xOf(k)},${yOf(p)}`).join(" ");
             const c = colorFor(l);
             const opacity = l.confidence >= 70 ? 0.95 : l.confidence >= 50 ? 0.7 : 0.5;
+            // Latest-value dot lives at the LAST available point, not the
+            // hardcoded ring-buffer index — during warm-up pts.length < 96 so
+            // pts[95] was undefined and yOf(undefined) emitted cy="NaN".
+            const lastIdx = pts.length - 1;
             return (
               <g key={l.ex}>
                 <path d={d} fill="none" stroke={c} strokeWidth={l.confidence>=80?1.8:1.2} opacity={opacity}/>
-                <circle cx={xOf(95)} cy={yOf(pts[95])} r={3} fill={c}/>
+                <circle cx={xOf(lastIdx)} cy={yOf(pts[lastIdx])} r={3} fill={c}/>
               </g>
             );
           })}
@@ -542,7 +624,7 @@ function ValuationChart({ asset, listings, series, norm }) {
           <div key={l.ex} className="legend-item">
             <span className="legend-dash" style={{background: l.structure.startsWith("SPV") ? "var(--c-cyan)" : l.structure==="synthetic" ? "var(--c-amber)" : l.structure==="mirror-credit" ? "var(--c-violet)" : "var(--c-magenta)"}}/>
             <span className="legend-text">{l.ex}</span>
-            <span className="muted mono">{STRUCT_META[l.structure].label}</span>
+            <span className="muted mono">{getStructMeta(l.structure).label}</span>
           </div>
         ))}
       </div>
@@ -574,8 +656,19 @@ function HoverCard({ listings, series, hoverX, colorFor }) {
 function PremiumBars({ norm }) {
   const ref = norm.consensus;
   const rows = [...norm.rows]
-    .map(r => ({ ...r, prem: (r.impliedFDV/ref - 1) * 100 }))
+    .map(r => ({ ...r, prem: safeRatioPct(r.impliedFDV, ref) }))
+    .filter(r => r.prem != null)
     .sort((a,b)=>b.prem-a.prem);
+  if (rows.length === 0) {
+    return (
+      <div className="panel">
+        <PanelHead title="PREMIUM / DISCOUNT" sub="vs consensus implied FDV"/>
+        <div className="bars" style={{padding:"24px",color:"var(--tx-2)"}}>
+          No calibrated venues to compare yet.
+        </div>
+      </div>
+    );
+  }
   const max = Math.max(...rows.map(r=>Math.abs(r.prem))) * 1.2 || 1;
   return (
     <div className="panel">
@@ -586,7 +679,7 @@ function PremiumBars({ norm }) {
           return (
             <div key={r.ex} className="bar-row">
               <div className="bar-name">
-                <span className={"struct-pill tone-"+STRUCT_META[r.structure].tone}>{STRUCT_META[r.structure].sym}</span>
+                <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
                 <span>{r.ex}</span>
               </div>
               <div className="bar-track">
@@ -618,29 +711,73 @@ const API_BASE = (function() {
   return `http://${host}:8000`;
 })();
 
+// `/api/admin/*` is gated behind X-Admin-Token (backend F49/F50). The operator
+// retrieves the active token from backend/logs/admin_token.txt (slice 3 F49),
+// pastes it once into the prompt below; we cache in localStorage. On 401 we
+// clear the cache so the next write re-prompts.
+const ADMIN_TOKEN_KEY = "preIpoAdminToken";
+
+function getAdminToken({ forcePrompt = false } = {}) {
+  if (typeof window === "undefined") return null;
+  let t = forcePrompt ? null : (() => {
+    try { return window.localStorage.getItem(ADMIN_TOKEN_KEY); } catch (e) { return null; }
+  })();
+  if (!t) {
+    try {
+      t = window.prompt(
+        "Admin token required.\n" +
+        "Operator: see backend/logs/admin_token.txt for the active value " +
+        "(or pin via ADMIN_TOKEN env var)."
+      );
+    } catch (e) { t = null; }
+    if (t) {
+      try { window.localStorage.setItem(ADMIN_TOKEN_KEY, t); } catch (e) {}
+    }
+  }
+  return t;
+}
+
+function clearAdminToken() {
+  try { window.localStorage.removeItem(ADMIN_TOKEN_KEY); } catch (e) {}
+}
+
+async function adminFetch(url, body) {
+  // Two-attempt cycle: cached → on 401, clear + re-prompt + retry once.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const token = getAdminToken({ forcePrompt: attempt > 0 });
+    if (!token) throw new Error("admin token required");
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": token,
+      },
+      body: JSON.stringify(body),
+    });
+    if (r.status === 401) {
+      clearAdminToken();
+      if (attempt === 0) continue;
+      throw new Error("unauthorized (bad admin token)");
+    }
+    if (!r.ok) throw new Error(`request failed: ${r.status}`);
+    return r.json();
+  }
+  throw new Error("admin token required");
+}
+
 async function postShares(assetId, shares, source, confidence) {
-  const r = await fetch(`${API_BASE}/api/admin/asset/${assetId}/shares`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fully_diluted_shares: shares, source, confidence }),
+  return adminFetch(`${API_BASE}/api/admin/asset/${assetId}/shares`, {
+    fully_diluted_shares: shares, source, confidence,
   });
-  if (!r.ok) throw new Error(`shares update failed: ${r.status}`);
-  return r.json();
 }
 
 async function postRatio(assetId, exchange, ratio, source, referenceFdv, confidence) {
-  const r = await fetch(`${API_BASE}/api/admin/market/${assetId}/${exchange}/ratio`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      share_ratio: ratio,
-      ratio_source: source,
-      ratio_reference_fdv: referenceFdv,
-      confidence,
-    }),
+  return adminFetch(`${API_BASE}/api/admin/market/${assetId}/${exchange}/ratio`, {
+    share_ratio: ratio,
+    ratio_source: source,
+    ratio_reference_fdv: referenceFdv,
+    confidence,
   });
-  if (!r.ok) throw new Error(`ratio update failed: ${r.status}`);
-  return r.json();
 }
 
 // ============================================================
@@ -768,8 +905,8 @@ function NormTable({ asset, norm, onFdvShares }) {
           </thead>
           <tbody>
             {[...norm.rows].sort((a,b)=>b.impliedFDV-a.impliedFDV).map((r,i)=> {
-              const prem = (r.impliedFDV/norm.consensus - 1) * 100;
-              const premRef = (r.impliedFDV/asset.lastRound.valuation - 1) * 100;
+              const prem = safeRatioPct(r.impliedFDV, norm.consensus);
+              const premRef = safeRatioPct(r.impliedFDV, asset.lastRound.valuation);
               return (
                 <tr key={r.ex}>
                   <td className="l">
@@ -783,8 +920,8 @@ function NormTable({ asset, norm, onFdvShares }) {
                     </div>
                   </td>
                   <td className="l">
-                    <span className={"struct-pill tone-"+STRUCT_META[r.structure].tone}>{STRUCT_META[r.structure].sym}</span>
-                    <span className="struct-label">{STRUCT_META[r.structure].label}</span>
+                    <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
+                    <span className="struct-label">{getStructMeta(r.structure).label}</span>
                   </td>
                   <td className={"r mono price-cell " + (r.direction === "up" ? "flash-up" : r.direction === "down" ? "flash-down" : "")} key={"px-"+r.ex+"-"+r.flashAt}>{fmtNum(r.tokenPrice)}</td>
                   <td className="r mono">
@@ -798,8 +935,8 @@ function NormTable({ asset, norm, onFdvShares }) {
                     </span>
                   </td>
                   <td className="l">
-                    <span className={"src-dot dot-"+SRC_META[r.ratioSource].dot}/>
-                    <span className="src-label">{SRC_META[r.ratioSource].label}</span>
+                    <span className={"src-dot dot-"+getSrcMeta(r.ratioSource).dot}/>
+                    <span className="src-label">{getSrcMeta(r.ratioSource).label}</span>
                     {r.docUrl && (
                       <a
                         href={r.docUrl}
@@ -823,12 +960,12 @@ function NormTable({ asset, norm, onFdvShares }) {
                   <td className="r mono accent">{fmtNum(r.impliedShare)}</td>
                   <td className="r mono accent strong">${fmtUSD(r.impliedFDV)}</td>
                   <td
-                    className={"r mono strong " + (premRef>=0?"ok":"bad")}
+                    className={"r mono strong " + (premRef == null ? "muted" : premRef >= 0 ? "ok" : "bad")}
                     title={`Implied FDV vs $${fmtUSD(asset.lastRound.valuation)} (${asset.lastRound.date} round)`}
                   >
                     {fmtPremium(premRef)}
                   </td>
-                  <td className={"r mono " + (prem>=0?"ok":"bad")}>{fmtPct(prem,2)}</td>
+                  <td className={"r mono " + (prem == null ? "muted" : prem >= 0 ? "ok" : "bad")}>{fmtPct(prem, 2)}</td>
                   <td className="r mono">${fmtUSD(r.vol24)}</td>
                   <td className="r mono">${fmtUSD(r.oi)}</td>
                   <td className="r mono">{r.spread}</td>
@@ -938,7 +1075,7 @@ function StructureBreakdown({ norm }) {
       <div className="struct-bar-row">
         {arr.map(g => (
           <div key={g.structure}
-               className={"struct-seg tone-"+STRUCT_META[g.structure].tone}
+               className={"struct-seg tone-"+getStructMeta(g.structure).tone}
                style={{width: g.oiShare+"%"}}
                title={g.structure + " " + g.oiShare.toFixed(1) + "%"}>
             <span className="struct-seg-pct mono">{g.oiShare.toFixed(0)}%</span>
@@ -949,8 +1086,8 @@ function StructureBreakdown({ norm }) {
         {arr.map(g => (
           <div key={g.structure} className="struct-row">
             <div className="struct-row-l">
-              <span className={"struct-pill tone-"+STRUCT_META[g.structure].tone}>{STRUCT_META[g.structure].sym}</span>
-              <span className="struct-row-name">{STRUCT_META[g.structure].label}</span>
+              <span className={"struct-pill tone-"+getStructMeta(g.structure).tone}>{getStructMeta(g.structure).sym}</span>
+              <span className="struct-row-name">{getStructMeta(g.structure).label}</span>
               <span className="muted">×{g.count}</span>
             </div>
             <div className="struct-row-cells">
@@ -1015,7 +1152,7 @@ function FundingPanel({ assetId, listings }) {
             return (
               <div key={r.ex} className="funding-row na">
                 <div className="fr-venue">
-                  <span className={"struct-pill tone-"+STRUCT_META[r.structure].tone}>{STRUCT_META[r.structure].sym}</span>
+                  <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
                   <div className="fr-venue-name">{r.ex}</div>
                   <span className="muted fr-na-label">structural · no funding</span>
                 </div>
@@ -1027,7 +1164,7 @@ function FundingPanel({ assetId, listings }) {
           return (
             <div key={r.ex} className="funding-row">
               <div className="fr-venue">
-                <span className={"struct-pill tone-"+STRUCT_META[r.structure].tone}>{STRUCT_META[r.structure].sym}</span>
+                <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
                 <div className="fr-venue-name">{r.ex}</div>
               </div>
               <div className="fr-bar">
@@ -1123,7 +1260,7 @@ function HedgeBook({ assetId, norm }) {
               <div className="hb-rank mono">{(i+1).toString().padStart(2,"0")}</div>
               <div className="hb-leg">
                 <div className="hb-leg-top">
-                  <span className={"struct-pill tone-"+STRUCT_META[c.long.structure].tone}>{STRUCT_META[c.long.structure].sym}</span>
+                  <span className={"struct-pill tone-"+getStructMeta(c.long.structure).tone}>{getStructMeta(c.long.structure).sym}</span>
                   <span className="hb-leg-ex">{c.long.ex}</span>
                 </div>
                 <div className="hb-leg-bot mono">
@@ -1133,7 +1270,7 @@ function HedgeBook({ assetId, norm }) {
               </div>
               <div className="hb-leg">
                 <div className="hb-leg-top">
-                  <span className={"struct-pill tone-"+STRUCT_META[c.short.structure].tone}>{STRUCT_META[c.short.structure].sym}</span>
+                  <span className={"struct-pill tone-"+getStructMeta(c.short.structure).tone}>{getStructMeta(c.short.structure).sym}</span>
                   <span className="hb-leg-ex">{c.short.ex}</span>
                 </div>
                 <div className="hb-leg-bot mono">
@@ -1192,6 +1329,16 @@ function PanelHead({ title, sub, right }) {
 function DerivationPanel({ asset, norm }) {
   // pick highest confidence row as anchor explanation
   const anchor = [...norm.rows].sort((a,b)=>b.confidence-a.confidence)[0];
+  if (!anchor) {
+    return (
+      <div className="panel deriv-panel">
+        <PanelHead title="DERIVATION" sub="how implied FDV is built"/>
+        <div className="deriv-body" style={{padding:"24px",color:"var(--tx-2)"}}>
+          Waiting for a live calibrated venue to anchor the derivation chain…
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="panel deriv-panel">
       <PanelHead title="DERIVATION" sub="how implied FDV is built"/>
@@ -1213,7 +1360,7 @@ function DerivationPanel({ asset, norm }) {
             <div className="deriv-formula mono">
               1 token = <span className="accent">{fmtNum(anchor.shareRatio, 4)}</span> shares
             </div>
-            <div className="deriv-note muted">source · {SRC_META[anchor.ratioSource].label}</div>
+            <div className="deriv-note muted">source · {getSrcMeta(anchor.ratioSource).label}</div>
           </div>
         </div>
         <div className="deriv-arrow">↓</div>
@@ -1277,8 +1424,8 @@ function VenueCards({ asset, norm }) {
       />
       <div className="venue-grid">
         {rows.map((r) => {
-          const premRef = ((r.impliedFDV / refFdv) - 1) * 100;
-          const premCons = cons > 0 ? ((r.impliedFDV / cons) - 1) * 100 : 0;
+          const premRef = safeRatioPct(r.impliedFDV, refFdv);
+          const premCons = safeRatioPct(r.impliedFDV, cons);
           const isPerp = r.structure === "perp";
           const fPct = r.fundingRate != null ? r.fundingRate * 100 : null;
           const meta = STRUCT_META[r.structure] || { sym: "?", tone: "neutral", label: r.structure };
@@ -1290,7 +1437,7 @@ function VenueCards({ asset, norm }) {
           const hoverTitle =
             `${r.ex} · ${r.symbol || ""}\n` +
             `Token: $${fmtNum(r.tokenPrice)}\n` +
-            `Ratio: 1 : ${fmtNum(r.shareRatio, 4)} (${SRC_META[r.ratioSource]?.label || r.ratioSource})\n` +
+            `Ratio: 1 : ${fmtNum(r.shareRatio, 4)} (${getSrcMeta(r.ratioSource).label})\n` +
             `Confidence: ${r.confidence}/100`;
           return (
             <div
@@ -1316,7 +1463,7 @@ function VenueCards({ asset, norm }) {
                 <span className="vc-stat-k muted">가격</span>
               </div>
               <div className="vc-stat">
-                <span className={"vc-stat-v mono " + (premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
+                <span className={"vc-stat-v mono " + (premRef == null ? "muted" : premRef >= 0 ? "ok" : "bad")}>{fmtPremium(premRef)}</span>
                 <span className="vc-stat-k muted">변동</span>
               </div>
               <div className="vc-stat">
@@ -1332,8 +1479,8 @@ function VenueCards({ asset, norm }) {
                 </div>
               )}
               <div className="vc-stat">
-                <span className={"vc-stat-v mono " + (premCons >= 0 ? "ok" : "bad")}>
-                  {cons > 0 ? fmtPct(premCons, 2) : "—"}
+                <span className={"vc-stat-v mono " + (premCons == null ? "muted" : premCons >= 0 ? "ok" : "bad")}>
+                  {fmtPct(premCons, 2)}
                 </span>
                 <span className="vc-stat-k muted">갭(%)</span>
               </div>

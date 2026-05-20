@@ -62,13 +62,25 @@
   }
 
   function ratioSourceFromMarket(m) {
-    // Map BE source values to prototype's narrower set; "uncalibrated"
-    // venues are never added to LISTINGS so we don't need that case.
-    const src = m.ratio_source;
-    if (src === "official") return "official";
-    if (src === "whitepaper") return "whitepaper";
-    if (src === "back-solved") return "back-solved";
-    return "market-fitted";
+    // Pass the BE literal through verbatim. The previous implementation
+    // collapsed every unknown value (including a future Pydantic literal
+    // and the "uncalibrated" sentinel) to "market-fitted", which silently
+    // mislabeled provenance — operators saw the red Market-fitted badge on
+    // a row that may have come from an entirely different source. The FE
+    // SRC_META lookup degrades gracefully via a fallback object on the
+    // app.jsx side, so we no longer need to whitelist.
+    return m.ratio_source || "uncalibrated";
+  }
+
+  function isLiveMarket(m) {
+    // A market that's "live" enough to keep in LISTINGS / drive a tick row.
+    // Disabled / uncalibrated / zero-or-negative ratios are routed to
+    // DISABLED instead (or simply dropped from LISTINGS on a config update).
+    if (!m) return false;
+    if (m.share_ratio == null) return false;
+    if (typeof m.share_ratio !== "number" || !(m.share_ratio > 0)) return false;
+    if (m.ratio_source === "uncalibrated") return false;
+    return true;
   }
 
   function makeListingRow(quote, market, prev) {
@@ -202,17 +214,22 @@
   }
 
   function handleSnapshot(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const assets = Array.isArray(msg.assets) ? msg.assets : [];
+    const markets = Array.isArray(msg.markets) ? msg.markets : [];
+    const statuses = Array.isArray(msg.statuses) ? msg.statuses : [];
     // Index metadata
     Object.keys(assetsById).forEach((k) => delete assetsById[k]);
-    (msg.assets || []).forEach((a) => {
-      assetsById[a.id] = a;
+    assets.forEach((a) => {
+      if (a && typeof a.id === "string") assetsById[a.id] = a;
     });
     Object.keys(marketsById).forEach((k) => delete marketsById[k]);
-    (msg.markets || []).forEach((m) => {
+    markets.forEach((m) => {
+      if (!m || typeof m.asset_id !== "string" || typeof m.exchange !== "string") return;
       const id = `${m.asset_id}:${m.exchange}`;
       marketsById[id] = m;
     });
-    rebuildDisabled(msg.statuses);
+    rebuildDisabled(statuses);
 
     // Reset LISTINGS / SERIES / FUNDING from history
     window.LISTINGS = {};
@@ -248,7 +265,7 @@
         if (pts.length > 0) {
           const last = pts[pts.length - 1];
           const mkt = marketsById[`${asset_id}:${exchange}`];
-          if (mkt && mkt.share_ratio != null && last.calibration_status !== "uncalibrated") {
+          if (mkt && isLiveMarket(mkt) && last.calibration_status !== "uncalibrated") {
             if (!window.LISTINGS[asset_id]) window.LISTINGS[asset_id] = [];
             window.LISTINGS[asset_id] = window.LISTINGS[asset_id].filter(
               (r) => r.ex !== exchange
@@ -270,11 +287,16 @@
   }
 
   function handleTick(quote) {
+    if (!quote || typeof quote.asset_id !== "string" || typeof quote.exchange !== "string") return;
+    if (typeof quote.token_price !== "number" || !isFinite(quote.token_price)) return;
     const asset_id = quote.asset_id;
     const exchange = quote.exchange;
     const market = marketsById[`${asset_id}:${exchange}`];
     if (!market) return;
-    if (quote.calibration_status === "uncalibrated" || market.share_ratio == null) {
+    // share_ratio <= 0 is treated identically to null — a bad calibrate write
+    // can zero the ratio and would otherwise propagate Infinity into the
+    // consensus rollup at line ~305.
+    if (quote.calibration_status === "uncalibrated" || !isLiveMarket(market)) {
       return;
     }
 
@@ -314,20 +336,27 @@
   }
 
   function handleStatus(msg) {
-    window.PRE_IPO_LIVE.statuses = msg.statuses || [];
-    rebuildDisabled(msg.statuses);
+    if (!msg || typeof msg !== "object") return;
+    const statuses = Array.isArray(msg.statuses) ? msg.statuses : [];
+    window.PRE_IPO_LIVE.statuses = statuses;
+    rebuildDisabled(statuses);
     scheduleDispatch();
   }
 
   function handleConfigUpdate(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const markets = Array.isArray(msg.markets) ? msg.markets : [];
+    const assets = Array.isArray(msg.assets) ? msg.assets : [];
     // Refresh markets metadata so the next tick uses the new share_ratio.
     // Also patch the ASSETS entry (fully_diluted_shares, headline, etc.) so
     // FDV editors and the AssetHeader pick up admin edits without a reload.
-    (msg.markets || []).forEach((m) => {
+    markets.forEach((m) => {
+      if (!m || typeof m.asset_id !== "string" || typeof m.exchange !== "string") return;
       marketsById[`${m.asset_id}:${m.exchange}`] = m;
     });
     rebuildDisabled(window.PRE_IPO_LIVE.statuses);
-    (msg.assets || []).forEach((a) => {
+    assets.forEach((a) => {
+      if (!a || typeof a.id !== "string") return;
       assetsById[a.id] = a;
       const existing = (window.ASSETS || []).find((x) => x.id === a.id);
       if (existing) {
@@ -346,11 +375,18 @@
       }
     });
     // Re-emit listings so confidence/ratio_source/share_ratio refresh too.
+    // Critically: a market that flipped to uncalibrated (or zeroed its ratio)
+    // must drop OUT of LISTINGS — otherwise the row keeps showing as live
+    // with a stale ratio + relabelled provenance, and rebuildDisabled adds
+    // a contradictory ghost row right next to it.
     Object.keys(window.LISTINGS || {}).forEach((asset_id) => {
       const arr = window.LISTINGS[asset_id];
-      for (let i = 0; i < arr.length; i++) {
+      for (let i = arr.length - 1; i >= 0; i--) {
         const mkt = marketsById[`${asset_id}:${arr[i].ex}`];
-        if (!mkt || mkt.share_ratio == null) continue;
+        if (!mkt || !isLiveMarket(mkt)) {
+          arr.splice(i, 1);
+          continue;
+        }
         arr[i] = {
           ...arr[i],
           structure: structureFromMarket(mkt),
@@ -384,11 +420,30 @@
   const ALERT_COOLDOWN_MS = 60_000;
 
   function loadAlerts() {
+    // Defensive: localStorage["preIpoAlerts"] is operator-mutable in DevTools
+    // and a partially-typed entry (e.g. {} or [null]) would crash
+    // evaluateAlerts on every tick — `filter is not a function` or null
+    // deref — and freeze live updates. Normalize to "array of well-formed
+    // rule objects" before returning.
+    let raw;
     try {
-      return JSON.parse(localStorage.getItem(ALERT_KEY) || "[]");
+      raw = JSON.parse(localStorage.getItem(ALERT_KEY) || "[]");
     } catch (e) {
       return [];
     }
+    if (!Array.isArray(raw)) return [];
+    const valid = raw.filter((r) =>
+      r && typeof r === "object" &&
+      typeof r.assetId === "string" &&
+      typeof r.kind === "string" &&
+      typeof r.value === "number" && isFinite(r.value)
+    );
+    if (valid.length !== raw.length) {
+      // Self-heal: overwrite with the validated subset so the next load is
+      // fast and the operator sees the cleaned list in DevTools.
+      try { localStorage.setItem(ALERT_KEY, JSON.stringify(valid)); } catch (e) {}
+    }
+    return valid;
   }
   function saveAlerts(arr) {
     try {
@@ -516,10 +571,18 @@
         console.warn("[live] bad json", e);
         return;
       }
-      if (msg.type === "snapshot") handleSnapshot(msg);
-      else if (msg.type === "tick") handleTick(msg.quote);
-      else if (msg.type === "status") handleStatus(msg);
-      else if (msg.type === "config-update") handleConfigUpdate(msg);
+      if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+      // Per-handler try/catch: a thrown handler (e.g. unexpected payload
+      // shape that slipped past the shape guards) must not bork the
+      // onmessage subscription — otherwise the next frame is lost too.
+      try {
+        if (msg.type === "snapshot") handleSnapshot(msg);
+        else if (msg.type === "tick") handleTick(msg.quote);
+        else if (msg.type === "status") handleStatus(msg);
+        else if (msg.type === "config-update") handleConfigUpdate(msg);
+      } catch (e) {
+        console.warn("[live] handler error", msg.type, e);
+      }
     };
     ws.onerror = (e) => {
       console.warn("[live] ws error", e);
@@ -527,6 +590,17 @@
     ws.onclose = () => {
       window.PRE_IPO_LIVE.connected = false;
       console.warn("[live] ws closed; will reconnect");
+      // Detach handlers from the closing instance so any in-flight frame
+      // delivered between onclose and GC doesn't fire stale-closure logic,
+      // and the next reconnect's onopen can't race a parked handler.
+      const dead = ws;
+      ws = null;
+      if (dead) {
+        dead.onmessage = null;
+        dead.onopen = null;
+        dead.onerror = null;
+        dead.onclose = null;
+      }
       scheduleDispatch();
       scheduleReconnect();
     };

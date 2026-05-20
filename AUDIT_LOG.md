@@ -11,7 +11,7 @@
 | 1 | adapters + supervisor + aggregator + normalizer + store | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+5 smoke | ✅ `1d488f2` |
 | 2 | registry + admin + calibrate + data files + models | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+11 smoke | ✅ `48daec8` |
 | 3 | rest/ws/health api + main + config + start/stop.bat | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+33 smoke | ✅ |
-| 4 | data-live.js + app.jsx + HTML | — | — | — | — | — | — |
+| 4 | data-live.js + app.jsx + HTML | ✅ | ✅ | ✅ | ✅ | ✅ babel-parse+node-sim+47 smoke | ✅ |
 
 ## Slice 1 — data ingestion path
 
@@ -255,3 +255,91 @@ The raw reviewer reports live in the repo root but are gitignored:
 `slice_3_prompt.txt`, `claude_slice_3.md`, `codex_slice_3.md`. To re-run on
 VPS: `codex exec --skip-git-repo-check -s read-only --cd "$(pwd)" -o codex_slice_3.md "$(cat slice_3_prompt.txt)"`. The Claude-side review was a
 general-purpose sub-agent invocation from the parent session.
+
+## Slice 4 — frontend live wiring
+
+**Date:** 2026-05-20 (KST).
+
+### Reviewer verdicts
+- **Self-review** (Claude general-purpose sub-agent): 1 CRITICAL, 4 IMPORTANT, 5 MINOR. Verdict: `acceptable-with-fixes`.
+- **Codex review**: 3 CRITICAL, 3 IMPORTANT, 2 MINOR. Verdict: `unsafe`.
+
+Both reviewers independently flagged the admin-write FE as the most
+operationally broken thing: every FDV / share_ratio edit issued from the
+dashboard 401s because no `X-Admin-Token` header is sent (slice-3 hardened
+the BE for this exact case). Codex additionally caught two failure modes
+the Claude reviewer missed — `ratioSourceFromMarket` silently relabelling
+new BE `RatioSource` literals to "market-fitted" while NOT removing the
+stale row from LISTINGS on a config-update flip to uncalibrated, and a
+chain of empty-listing dereferences (`norm.max.ex`, `anchor.ex`) that
+crash the whole dashboard when no calibrated venue exists yet. Claude
+caught the inverse: ~10 unguarded `STRUCT_META[r.structure]` sites that
+TypeError out of NormTable/PremiumBars/etc the moment a future BE
+`Structure` literal ships before the FE has a matching meta entry, and a
+chain of unguarded divide-by-`refFdv` / `norm.consensus` math paths.
+
+### Overlap findings (both flagged)
+- `app.jsx:621-644` — `postShares` / `postRatio` omit `X-Admin-Token`. Admin
+  UI is dead in the field. (Claude CRITICAL, codex IMPORTANT)
+- `data-live.js:64-72` — `ratioSourceFromMarket` falls through to
+  "market-fitted" for unknown values. (Claude IMPORTANT, codex CRITICAL)
+- `app.jsx:520` (now: F60 site) — `pts[95]` hardcoded index; warm-up pts
+  arrays shorter than 96 emit NaN coordinates. (both MINOR)
+- `Pre-IPO Normalizer.html:14-18` — Babel-standalone + React dev UMD in
+  production. (Claude MINOR, codex IMPORTANT — deferred)
+- `data-live.js:272-289` — WS handlers don't validate payload shape
+  before dereference. (both IMPORTANT)
+
+### Claude-unique findings
+- 🟡 IMPORTANT — ~10 sites in app.jsx access `STRUCT_META[r.structure].{tone,sym,label}` with no fallback. Per MEMORY's "BE/FE enum lockstep" entry, any future `Structure` literal added BE-first blanks every component that iterates rows (NormTable, PremiumBars, StructureBreakdown, FundingPanel, HedgeBook, ValuationChart legend).
+- 🟡 IMPORTANT — `((cons - refFdv) / refFdv) * 100` math in AssetRail / AssetHeader / KPIStrip / NormTable propagates Infinity into `fmtPremium` when reference data goes zero/null.
+- 🟡 IMPORTANT — `data-live.js:304` `r.tokenPrice / r.shareRatio` not guarded against `shareRatio === 0`. A bad calibrate write to 0 contaminates `asset.consensusFDV` with Infinity.
+- MINOR — `connect()` does not detach old `ws.{onopen,onmessage,onerror,onclose}` before reassigning.
+
+### Codex-unique findings
+- 🔴 CRITICAL — `data-live.js:322-360` handleConfigUpdate patches existing rows when `share_ratio` exists but does NOT remove rows whose `ratio_source` became `uncalibrated`. Combined with the relabelling bug above, a venue can stay in LISTINGS with a stale ratio displayed as "Market-fitted" even after BE marks it uncalibrated.
+- 🔴 CRITICAL — `app.jsx:1521,368-398,1192-1216` empty live listings crash KPIStrip (`norm.max.ex`) and DerivationPanel (`anchor.ex` where anchor is undefined). Reachable when all markets are uncalibrated/disabled, at startup before ticks, or after a config update removes valid rows.
+- 🔴 CRITICAL — `data-live.js:386-388,440-441` `loadAlerts` only catches JSON.parse failures. A localStorage entry like `{}` or `[null]` is valid JSON but breaks `filter is not a function` in `evaluateAlerts`, which runs BEFORE the rest of `handleTick` — one corrupted entry freezes live updates on every tick.
+- IMPORTANT — `app.jsx:190-192` TopBar always renders the green `LIVE` pulse, even when the footer says `WS RECONNECTING`.
+
+### Applied fixes (2026-05-20)
+
+| ID | File(s) | Severity | Source | Change |
+|---|---|---|---|---|
+| F52 | app.jsx | CRITICAL | both | `getAdminToken()` helper backed by `localStorage["preIpoAdminToken"]` + `window.prompt`; `adminFetch()` wraps both writes with `X-Admin-Token`, clears cache + re-prompts once on 401. Operator now retrieves the token from `backend/logs/admin_token.txt` (slice 3 F49). |
+| F53 | data-live.js + app.jsx | CRITICAL | both | `ratioSourceFromMarket` returns `m.ratio_source` verbatim; `SRC_META` gained an `"uncalibrated"` entry; new `isLiveMarket()` predicate (share_ratio>0, finite, ratio_source!=="uncalibrated"); `handleConfigUpdate` now splices rows out of LISTINGS when `isLiveMarket` flips false; snapshot seeding uses the same gate. Stale "market-fitted" relabel is gone. |
+| F54 | app.jsx (multiple) | CRITICAL | codex | KPIStrip computes `hasRows` and feeds `max/min/spread` through fallback values; DerivationPanel returns an explicit "Waiting for live calibrated venue…" panel when `anchor` is undefined; PremiumBars + ValuationChart render placeholder panels when their inputs are empty. No more `(undefined).ex` crashes. |
+| F55 | data-live.js | CRITICAL | codex | `loadAlerts` parses JSON, falls back to `[]` on non-array, filters entries to `{assetId:string, kind:string, value:finite-number}`; self-heals localStorage by re-writing the validated subset. `evaluateAlerts` can no longer dereference null/garbage. |
+| F56 | app.jsx | IMPORTANT | Claude | New `getStructMeta(s)` + `getSrcMeta(s)` helpers return `{sym, tone, label}` fallback objects when an enum value isn't in the meta map. Replaced ~10 unguarded `STRUCT_META[r.structure].{tone,sym,label}` sites + 3 `SRC_META[r.ratioSource]` sites. Future BE `Structure` / `RatioSource` literals now degrade to a neutral "?" pill instead of TypeError-ing out of the table. |
+| F57 | app.jsx | IMPORTANT | Claude | New `safePct(num, denom)` + `safeRatioPct(num, denom)` helpers that return `null` when `denom <= 0` or non-finite; `fmtPct` now also renders "—" for null. AssetRail / AssetHeader / KPIStrip / NormTable / VenueCards / PremiumBars routed through these. No more `+Infinity%` / `NaNx` rendered text. |
+| F58 | data-live.js | IMPORTANT | Claude | `handleTick` rejects `quote.token_price` NaN/Inf + uses `isLiveMarket(market)` instead of bare `share_ratio == null`. Zero / negative ratios are treated identically to null, so a bad calibrate write can no longer pump Infinity into `asset.consensusFDV`. |
+| F59 | data-live.js | IMPORTANT | codex | Each WS-handler entry guards: `msg` is object, `assets`/`markets`/`statuses` are arrays, asset/market entries have string `id`/`asset_id`/`exchange`. Dispatcher now also validates `msg.type` is a string and wraps each handler call in try/catch so a thrown handler can't bork the subscription. |
+| F60 | app.jsx | MINOR | both | ValuationChart latest-value dot uses `pts.length - 1` (renamed `lastIdx`) instead of hardcoded `pts[95]`. Warm-up dots no longer emit `cy="NaN"`. |
+| F61 | app.jsx | MINOR | Claude | ValuationChart early-returns a "Waiting for tick history…" panel when `allVals` is empty (was `Math.min(...[])===Infinity` propagating into NaN coordinates). |
+| F62 | app.jsx | MINOR | codex | New `ConnStatusCell` component drives the top-bar dot + label off `window.PRE_IPO_LIVE.connected`, refreshed by a 1s interval (matches the existing FootBar logic). "LIVE" and "WS RECONNECTING" can no longer appear simultaneously. |
+| F63 | data-live.js | MINOR | Claude | `onclose` nulls `ws.{onopen,onmessage,onerror,onclose}` on the dying instance before scheduling reconnect; eliminates stale-closure risk on in-flight frames delivered between `onclose` and GC. |
+
+**Deferred (record only):**
+- Pre-IPO Normalizer.html:14-18 — replace React-dev UMD + Babel-standalone with a prebuilt `app.js` (esbuild/Vite, one-line npm). codex IMPORTANT, Claude MINOR. Larger build-tooling change; out of scope for the audit cycle.
+- `Pre-IPO Normalizer.html:6` `<meta viewport content="width=1440">` forces desktop layout on mobile — not in audit scope, document only.
+- `r.calibrationStatus="stale"` quotes look identical to "calibrated" in the table. TickAge badge partially compensates.
+- `addPremiumAlert` parses `0x` as `value = -100` (premium-below); probably intended given the "consensus only" semantics.
+- `r.spread` rounded to int in `data-live.js` — sub-bp precision loss if BE ever emits tight spot venues.
+- The "scheduleReconnect could double-fire" risk Claude flagged turned out not to apply: `onclose` only runs once per ws instance, and the construction-throw path uses a fresh instance. Recorded as a non-defect.
+- StructureBreakdown + HedgeBook were also checked for empty-rows safety; they degrade cleanly (empty arr → returns null) without changes.
+
+### Verification (2026-05-20)
+- `node --check data-live.js` → clean
+- `node .check/check_jsx.cjs app.jsx` (@babel/preset-env + preset-react) → OK lines=1742 bytes=103444
+- `node .check/smoke_slice4.cjs` → 47 PASS assertions, ALL SLICE-4 SMOKE TESTS PASSED. Mix of static-pattern checks against both files and a JSDOM-free functional sim that rewrites the IIFE wrapper to expose `handleSnapshot` / `handleTick` / `handleConfigUpdate` / `ratioSourceFromMarket` / `isLiveMarket` / `loadAlerts` for direct invocation. Asserts:
+  - F53 sim: uncalibrated passes through (was "market-fitted")
+  - F58 sim: `isLiveMarket` rejects 0 / negative / null / uncalibrated
+  - F59 sim: handleSnapshot / handleTick tolerate null / non-object / empty
+  - F53 sim: handleConfigUpdate that flips okx→uncalibrated drops the LISTINGS row
+  - F55 sim: loadAlerts skips malformed entries AND self-heals localStorage
+  - F55 sim: non-array storage returns `[]`
+- Backend slice-3 smoke re-run after slice-4 edits → still ALL SMOKE TESTS PASSED (no regression).
+
+### Artifacts from this slice (regenerable)
+- Gitignored: `slice_4_prompt.txt`, `claude_slice_4.md`, `codex_slice_4.md`
+- Committed: `.check/smoke_slice4.cjs` + `.check/check_jsx.cjs` + `.check/package.json` (needs `npm install` inside `.check/` to pull `@babel/standalone`; `node_modules/` stays gitignored).
