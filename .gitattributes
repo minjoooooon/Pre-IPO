@@ -3,3 +3,11 @@
 # would rewrite checkouts to CRLF and ./start.sh on the VPS would fail
 # with `bad interpreter: /usr/bin/env^M: no such file or directory`.
 *.sh text eol=lf
+
+# Windows .bat files MUST keep CRLF endings. cmd.exe parses .bat under the
+# assumption every line ends with CRLF; an LF-only file makes cmd glue
+# REM comments together and treat them as commands ("'Pre-IPO' is not
+# recognized as an internal or external command"). The Edit tool can
+# silently strip CRLF when modifying these files on a Linux-style shell,
+# so we force CRLF on checkout to make the foot-gun unreachable.
+*.bat text eol=crlf
