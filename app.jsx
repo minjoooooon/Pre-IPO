@@ -1529,6 +1529,56 @@ function DerivationPanel({ asset, norm }) {
 }
 
 // ============================================================
+// TopGap — single-line "cheapest -> richest" arb headline rendered above
+// the VenueCards grid. Inspired by Rebatify's max-gap card; their version
+// shows the gap % without naming the pair, which buries the actual
+// opportunity. We surface BOTH endpoints + the % gap + the USD difference
+// so the operator can act on it without scrolling to HedgeBook.
+//
+// Respects the structFilter applied to VenueCards — if the operator is
+// looking at SPOT only, the gap is computed over spot venues only (a perp
+// vs spot gap is usually a structure mismatch, not arb).
+// ============================================================
+function TopGap({ rows }) {
+  // Need at least two rows with finite implied FDV to compute a gap. The
+  // VenueCards caller already sorts by impliedFDV desc; pick richest/cheapest
+  // by re-scanning (cheaper than assuming order so this component is robust
+  // if called from elsewhere later).
+  const candidates = (rows || []).filter(
+    (r) => r && typeof r.impliedFDV === "number" && isFinite(r.impliedFDV) && r.impliedFDV > 0
+  );
+  if (candidates.length < 2) return null;
+  let cheapest = candidates[0];
+  let richest = candidates[0];
+  for (const r of candidates) {
+    if (r.impliedFDV < cheapest.impliedFDV) cheapest = r;
+    if (r.impliedFDV > richest.impliedFDV) richest = r;
+  }
+  if (cheapest === richest) return null;
+  const gapPct = safeRatioPct(richest.impliedFDV, cheapest.impliedFDV);
+  const gapUSD = richest.impliedFDV - cheapest.impliedFDV;
+  // Suppress the chip for very tight gaps (<0.5%) so it doesn't draw
+  // attention when there's effectively nothing to trade.
+  if (gapPct == null || gapPct < 0.5) return null;
+  return (
+    <div className="topgap-row mono">
+      <span className="topgap-label">TOP GAP</span>
+      <span className="topgap-sep">·</span>
+      <span className="topgap-venue topgap-cheap" title={`Cheapest: ${cheapest.ex} @ $${fmtUSD(cheapest.impliedFDV)}`}>
+        {cheapest.ex} <span className="muted">${fmtUSD(cheapest.impliedFDV)}</span>
+      </span>
+      <span className="topgap-arrow">→</span>
+      <span className="topgap-venue topgap-rich" title={`Richest: ${richest.ex} @ $${fmtUSD(richest.impliedFDV)}`}>
+        {richest.ex} <span className="muted">${fmtUSD(richest.impliedFDV)}</span>
+      </span>
+      <span className="topgap-sep">·</span>
+      <span className="topgap-pct ok strong">+{gapPct.toFixed(2)}%</span>
+      <span className="topgap-usd muted">≈ ${fmtUSD(gapUSD)} gap</span>
+    </div>
+  );
+}
+
+// ============================================================
 // VenueCards — at-a-glance grid comparing implied FDV / premium /
 // funding / vol across exchanges for the selected asset. Replaces
 // the heavy ValuationChart in the primary slot so the user can
@@ -1563,6 +1613,7 @@ function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange })
           </div>
         }
       />
+      <TopGap rows={rows} />
       <div className="venue-grid">
         {rows.map((r) => {
           const premRef = safeRatioPct(r.impliedFDV, refFdv);
@@ -1872,8 +1923,60 @@ function App() {
           />
           <StructureBreakdown norm={norm}/>
           <ValuationChart asset={asset} listings={listings} series={series} norm={norm}/>
+          <CaveatPanel/>
           <FootBar/>
         </main>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Methodology disclaimer — what this dashboard does NOT model.
+// Inspired by Rebatify's "What this doesn't cover" section. We quantify
+// gaps; we don't quantify the risk asymmetry behind them. Surfacing the
+// gaps in scope helps operators avoid mistaking paper-gap for arb.
+// ============================================================
+function CaveatPanel() {
+  const items = [
+    {
+      h: "Order-book depth",
+      b: "Top-of-book spread + 24h vol shown. Slippage at $100K / $1M / $5M not modeled — THIN chip flags shallow venues but does not quantify size-decay.",
+    },
+    {
+      h: "Funding cost accumulation",
+      b: "Current funding rate + APR displayed. Hold-period P&L drag is not integrated — a perp leg held 30 days at -50% APR loses ~4% to carry regardless of price convergence.",
+    },
+    {
+      h: "Calibration drift",
+      b: "share_ratio is fixed until a manual re-calibrate. New funding rounds, exchange rebases, or methodology disclosures invalidate it. DRIFT chip warns at 30d / 90d.",
+    },
+    {
+      h: "Geo / KYC",
+      b: "OKX, Bitget, Gate availability varies by jurisdiction (US/EU/KR all differ). Hyperliquid HIP-3 builder perps are non-KYC but settle on a separate L1.",
+    },
+    {
+      h: "Securities-law treatment",
+      b: "Mirror-credit (Bitget Republic), pre-IPO-certificate (Gate), SPV-mirror, and perp are different products with different counterparty risk on issuer failure and different post-IPO conversion paths. Tax treatment also differs.",
+    },
+    {
+      h: "Convergence timing",
+      b: "HedgeBook P&L assumes mean-reversion to consensus. Real convergence depends on IPO date + S-1 rebase + cross-venue arb capacity — none modeled.",
+    },
+  ];
+  return (
+    <div className="panel caveat-panel">
+      <PanelHead
+        title="WHAT THIS DASHBOARD DOESN'T MODEL"
+        sub="Read before sizing into the gaps. A 35% headline gap may be 2% after liquidity + carry + tax + counterparty."
+      />
+      <div className="caveat-body">
+        {items.map((it, i) => (
+          <div key={i} className="caveat-row">
+            <div className="caveat-h mono">{it.h}</div>
+            <div className="caveat-b">{it.b}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
