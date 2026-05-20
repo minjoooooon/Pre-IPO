@@ -49,15 +49,24 @@ class Supervisor:
     def register(self, adapter: ExchangeAdapter, market: Market) -> None:
         self._adapters.append(_SupervisedAdapter(adapter=adapter, market=market))
 
-    def disable(self, exchange: str, reason: str) -> None:
-        """Mark an adapter disabled without scheduling its stream."""
+    def disable(self, market_id: str, reason: str) -> None:
+        """Mark a single supervised adapter (by market_id) disabled.
+
+        Matching on `market.market_id` rather than `adapter.exchange_id`
+        prevents an uncalibrated row from blackholing sibling markets that
+        share the same exchange (e.g. one uncalibrated OKX market would
+        otherwise disable all OKX feeds). Also covers the inverse hyperliquid
+        case where `exchange_id` ("hyperliquid") doesn't match the per-DEX
+        market exchange ("hl-xyz"/"hl-vntl") — a market_id match is exact."""
         for sa in self._adapters:
-            if sa.adapter.exchange_id == exchange:
+            if sa.market.market_id == market_id:
                 sa.status = AdapterStatus(
-                    exchange=exchange,
+                    exchange=sa.market.exchange,
                     state="disabled",
                     last_error=reason,
                 )
+                return
+        log.warning("supervisor_disable_no_match", market_id=market_id, reason=reason)
 
     def statuses(self) -> list[AdapterStatus]:
         return [sa.status for sa in self._adapters]

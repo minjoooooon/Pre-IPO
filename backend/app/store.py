@@ -105,21 +105,40 @@ class TickStore:
             log.debug("store_dupe_ts_dropped", attempted=len(rows), inserted=inserted)
         return inserted
 
-    async def replay_recent(self, asset_id: str, seconds: int) -> list[dict]:
-        """Return ticks for an asset newer than (now - seconds), oldest first."""
+    async def replay_recent(
+        self, asset_id: str, seconds: int, limit: int | None = None
+    ) -> list[dict]:
+        """Return ticks for an asset newer than (now - seconds), oldest first.
+
+        `limit` (optional) caps the number of rows returned by the SQLite
+        engine itself — picks the NEWEST rows when the window contains more
+        than `limit` ticks. None means no SQL-level cap (warm-up path)."""
         if self._db is None:
             raise RuntimeError("TickStore not initialized")
         cutoff = time.time() - seconds
-        cursor = await self._db.execute(
-            """
-            SELECT market_id, asset_id, exchange, token_price, implied_share_price, implied_fdv,
-                   vol24, oi, funding_rate, confidence, calibration_status, timestamp
-            FROM ticks
-            WHERE asset_id = ? AND timestamp > ?
-            ORDER BY timestamp ASC
-            """,
-            (asset_id, cutoff),
-        )
+        if limit is None:
+            query = (
+                "SELECT market_id, asset_id, exchange, token_price, implied_share_price, implied_fdv, "
+                "       vol24, oi, funding_rate, confidence, calibration_status, timestamp "
+                "FROM ticks "
+                "WHERE asset_id = ? AND timestamp > ? "
+                "ORDER BY timestamp ASC"
+            )
+            params: tuple = (asset_id, cutoff)
+        else:
+            # Two-step: take newest `limit` then re-order ASC so the caller
+            # sees oldest-first like the unbounded path.
+            query = (
+                "SELECT * FROM ("
+                "  SELECT market_id, asset_id, exchange, token_price, implied_share_price, implied_fdv, "
+                "         vol24, oi, funding_rate, confidence, calibration_status, timestamp "
+                "  FROM ticks "
+                "  WHERE asset_id = ? AND timestamp > ? "
+                "  ORDER BY timestamp DESC LIMIT ?"
+                ") ORDER BY timestamp ASC"
+            )
+            params = (asset_id, cutoff, limit)
+        cursor = await self._db.execute(query, params)
         cols = [c[0] for c in cursor.description]
         rows = await cursor.fetchall()
         await cursor.close()

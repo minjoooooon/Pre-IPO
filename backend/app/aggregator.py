@@ -26,7 +26,7 @@ class Aggregator:
         self._store = store
         # ring buffer: asset_id -> exchange -> deque[NormalizedQuote] (max ring_buffer_points)
         self._ring: dict[str, dict[str, deque[NormalizedQuote]]] = {}
-        self._subscribers: set[asyncio.Queue[dict]] = set()
+        self._subscribers: set[asyncio.Queue[dict | None]] = set()
         self._pending_flush: list[NormalizedQuote] = []
         self._flush_task: asyncio.Task | None = None
         self._retention_task: asyncio.Task | None = None
@@ -110,14 +110,14 @@ class Aggregator:
 
     # ---- WS subscription ----
 
-    async def subscribe(self) -> asyncio.Queue[dict]:
-        q: asyncio.Queue[dict] = asyncio.Queue(maxsize=1024)
+    async def subscribe(self) -> asyncio.Queue[dict | None]:
+        q: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=1024)
         self._subscribers.add(q)
         # send initial snapshot
         await q.put(self.snapshot_message())
         return q
 
-    def unsubscribe(self, q: asyncio.Queue[dict]) -> None:
+    def unsubscribe(self, q: asyncio.Queue[dict | None]) -> None:
         self._subscribers.discard(q)
 
     def snapshot_message(self) -> dict:
@@ -165,7 +165,7 @@ class Aggregator:
     async def _broadcast(self, payload: dict) -> None:
         if not self._subscribers:
             return
-        dead: list[asyncio.Queue[dict]] = []
+        dead: list[asyncio.Queue[dict | None]] = []
         for q in self._subscribers:
             try:
                 q.put_nowait(payload)
@@ -174,6 +174,11 @@ class Aggregator:
                 dead.append(q)
         for q in dead:
             self._subscribers.discard(q)
+            # Wake the (parked) _sender so it sees the close signal instead of
+            # sitting on get() forever on an orphaned queue. The WS would
+            # otherwise stay "open" with zero data flowing.
+            with contextlib.suppress(asyncio.QueueFull):
+                q.put_nowait(None)
             log.warning("dropped_slow_subscriber")
 
     async def _flush_loop(self) -> None:

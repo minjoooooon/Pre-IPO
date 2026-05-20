@@ -21,6 +21,8 @@ new metadata immediately instead of showing stale FDV until the next snapshot.""
 
 from __future__ import annotations
 
+import hmac
+
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request, status
 from pydantic import BaseModel, Field
@@ -49,7 +51,11 @@ async def require_admin_token(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="admin token not configured"
         )
-    if not x_admin_token or x_admin_token != expected:
+    # `hmac.compare_digest` is constant-time — guards against the (mostly
+    # theoretical on loopback, real-world once exposed on VPS) timing oracle
+    # that bytewise `!=` would leak. Short-circuit `not x_admin_token` first
+    # because compare_digest expects two non-empty operands of equal type.
+    if not x_admin_token or not hmac.compare_digest(x_admin_token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or missing X-Admin-Token"
         )

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
@@ -27,16 +29,24 @@ from .supervisor import Supervisor
 
 def _configure_logging() -> None:
     settings.log_dir.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(
-        settings.log_dir / "app.log",
-        maxBytes=10 * 1024 * 1024,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    if not any(isinstance(h, RotatingFileHandler) for h in root.handlers):
+    # Guard BEFORE constructing the handler — otherwise the second call (from
+    # lifespan, after __main__ already ran us) opens a second file handle to
+    # app.log that the early-return strands. On Windows that handle locks the
+    # file and breaks log rotation.
+    target_path = str((settings.log_dir / "app.log").resolve())
+    have_file_handler = any(
+        getattr(h, "baseFilename", None) == target_path for h in root.handlers
+    )
+    if not have_file_handler:
+        handler = RotatingFileHandler(
+            settings.log_dir / "app.log",
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         root.addHandler(handler)
     if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler) for h in root.handlers):
         root.addHandler(logging.StreamHandler())
@@ -55,6 +65,24 @@ def _configure_logging() -> None:
 
 
 log = structlog.get_logger("app.main")
+
+
+def _persist_admin_token(token: str) -> Path:
+    """Write the active admin token to backend/logs/admin_token.txt.
+
+    Previously the token was logged at INFO into the rotating app.log; that
+    file backs up, syncs to OneDrive/Dropbox, etc. Writing to a separate file
+    gives the operator one retrieval path and keeps the secret out of the
+    log archive. On POSIX we tighten the file to 0o600; Windows ACLs are
+    left at the inherited default (real lockdown there would require
+    win32security — tracked as a follow-up)."""
+    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    target = settings.log_dir / "admin_token.txt"
+    target.write_text(token + "\n", encoding="utf-8")
+    if os.name == "posix":
+        with contextlib.suppress(OSError):
+            os.chmod(target, 0o600)
+    return target
 
 
 # Wiring registry: which adapter handles which exchange_id
@@ -78,12 +106,11 @@ async def lifespan(app: FastAPI):
     # _configure_logging skip duplicate handlers on the second call.
     _configure_logging()
     log.info("startup", host=settings.host, port=settings.port, db=str(settings.db_path))
-    # Log the active admin token once at startup so the operator can copy it
-    # into the FE prompt. If the operator set ADMIN_TOKEN explicitly, this
-    # just confirms it; if not, this is the only place to retrieve the
-    # auto-generated value.
+    # Token retrieval path: write the value to admin_token.txt and log only
+    # source + path. Keeps the secret out of the rotating app.log archive.
     admin_token_source = "env" if os.environ.get("ADMIN_TOKEN") else "generated"
-    log.info("admin_token", source=admin_token_source, token=settings.admin_token)
+    token_path = _persist_admin_token(settings.admin_token)
+    log.info("admin_token", source=admin_token_source, path=str(token_path))
 
     registry = get_registry()
     log.info(
@@ -92,43 +119,66 @@ async def lifespan(app: FastAPI):
         markets=len(registry.list_markets()),
     )
 
-    store = get_store()
-    await store.init()
-    log.info("store_initialized", db_path=str(settings.db_path))
+    # Acquire components incrementally so a failure midway through startup can
+    # unwind cleanly. Previously a crash between aggregator.start() and
+    # supervisor.start() would leave the aggregator running while the finally
+    # block tried to stop a never-assigned supervisor — silent leak.
+    store = None
+    aggregator = None
+    supervisor = None
+    try:
+        store = get_store()
+        await store.init()
+        log.info("store_initialized", db_path=str(settings.db_path))
 
-    aggregator = Aggregator(registry, store)
-    supervisor = Supervisor(sink=aggregator.on_tick)
-    aggregator.attach_status_source(supervisor.statuses)
+        aggregator = Aggregator(registry, store)
+        supervisor = Supervisor(sink=aggregator.on_tick)
+        aggregator.attach_status_source(supervisor.statuses)
 
-    # Register adapters per market in registry
-    for market in registry.list_markets():
-        adapter_cls = _ADAPTER_CLASSES.get(market.exchange)
-        if adapter_cls is None:
-            log.warning("no_adapter_class", exchange=market.exchange)
-            continue
-        adapter = adapter_cls()
-        supervisor.register(adapter, market)
-        # Disable adapters whose market is still uncalibrated. The previous
-        # `hyperliquid` blanket-disable is gone now that the adapter understands
-        # HIP-3 builder DEXes (hl-xyz, hl-vntl) via dex-prefixed symbols.
-        if market.ratio_source == "uncalibrated":
-            supervisor.disable(market.exchange, "uncalibrated: ratio not set")
+        # Register adapters per market in registry
+        for market in registry.list_markets():
+            adapter_cls = _ADAPTER_CLASSES.get(market.exchange)
+            if adapter_cls is None:
+                log.warning("no_adapter_class", exchange=market.exchange)
+                continue
+            adapter = adapter_cls()
+            supervisor.register(adapter, market)
+            # Disable adapters whose market is still uncalibrated. The previous
+            # `hyperliquid` blanket-disable is gone now that the adapter understands
+            # HIP-3 builder DEXes (hl-xyz, hl-vntl) via dex-prefixed symbols.
+            if market.ratio_source == "uncalibrated":
+                supervisor.disable(market.market_id, "uncalibrated: ratio not set")
 
-    await aggregator.start()
-    await supervisor.start()
+        await aggregator.start()
+        await supervisor.start()
 
-    # Mount WS now that aggregator + supervisor are live
-    ws_api.attach(app, aggregator)
+        # Mount WS now that aggregator + supervisor are live
+        ws_api.attach(app, aggregator)
 
-    app.state.aggregator = aggregator
-    app.state.supervisor = supervisor
+        app.state.aggregator = aggregator
+        app.state.supervisor = supervisor
+    except Exception:
+        log.exception("startup_failed_unwinding")
+        if supervisor is not None:
+            with contextlib.suppress(Exception):
+                await supervisor.stop()
+        if aggregator is not None:
+            with contextlib.suppress(Exception):
+                await aggregator.stop()
+        if store is not None:
+            with contextlib.suppress(Exception):
+                await store.close()
+        raise
 
     try:
         yield
     finally:
-        await supervisor.stop()
-        await aggregator.stop()
-        await store.close()
+        with contextlib.suppress(Exception):
+            await supervisor.stop()
+        with contextlib.suppress(Exception):
+            await aggregator.stop()
+        with contextlib.suppress(Exception):
+            await store.close()
         log.info("shutdown")
 
 
@@ -208,4 +258,5 @@ if __name__ == "__main__":
         reload=False,
         log_config=None,
         access_log=False,
+        ws_max_size=settings.ws_max_size_bytes,
     )

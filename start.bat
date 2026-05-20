@@ -22,6 +22,13 @@ REM ----------------------------------------------------------------
 REM Optional: pin a fixed admin token across restarts.
 REM set ADMIN_TOKEN=replace-me-with-your-secret
 
+REM Make sure backend\logs exists BEFORE -RedirectStandardError/Output point
+REM at files inside it. Start-Process fails silently if the parent dir is
+REM missing — on a fresh checkout (or first deploy on a new host) the dir
+REM doesn't exist yet and _configure_logging only creates it AFTER python
+REM starts, which it cannot if the redirection itself fails.
+if not exist "%~dp0backend\logs" mkdir "%~dp0backend\logs"
+
 REM Hidden launch. -WindowStyle Hidden hides this PowerShell stub;
 REM Start-Process -WindowStyle Hidden hides the python window itself.
 REM

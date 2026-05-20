@@ -59,11 +59,20 @@ class Settings(BaseModel):
     pending_flush_max: int = 10_000
     history_retention_days: int = 7
     history_replay_seconds: int = 86_400  # 24h
+    # Hard ceiling on rows returned by /api/history/{asset_id}. Without this a
+    # caller passing an unbounded `seconds=` could serialize hundreds of
+    # thousands of rows into one JSON response.
+    history_max_rows: int = 100_000
     # Period between TickStore retention sweeps (6h).
     retention_cleanup_interval_seconds: int = 21_600
 
     # ring buffer
     ring_buffer_points: int = 96
+
+    # uvicorn WS frame cap. Browser pages should never need to send big frames
+    # (the FE is read-mostly); cap inbound frames at 1 MiB so a malicious local
+    # page can't pin memory by streaming huge text frames.
+    ws_max_size_bytes: int = 1 << 20
 
 
 settings = Settings()

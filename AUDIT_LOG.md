@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|
 | 1 | adapters + supervisor + aggregator + normalizer + store | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+5 smoke | ✅ `1d488f2` |
 | 2 | registry + admin + calibrate + data files + models | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+11 smoke | ✅ `48daec8` |
-| 3 | rest/ws/health api + main + config + start/stop.bat | ✅ | ✅ | ✅ | ⏳ pending VPS | ⏳ pending | ⏳ pending |
+| 3 | rest/ws/health api + main + config + start/stop.bat | ✅ | ✅ | ✅ | ✅ | ✅ ruff+compile+33 smoke | ✅ |
 | 4 | data-live.js + app.jsx + HTML | — | — | — | — | — | — |
 
 ## Slice 1 — data ingestion path
@@ -139,9 +139,10 @@
 ## Slice 3 — API surface + process boot
 
 **Date:** 2026-05-20 (KST).
-**Status:** review complete, **fixes PENDING — to be applied on VPS in the next
-session.** This commit ships the slice-3 review only; the actual fixes will
-land in a follow-up commit once the dev host moves to VPS.
+**Status:** review + fixes complete. F38–F51 applied on the chore branch
+2026-05-20 in a second pass (same Windows host — VPS migration deferred);
+verified by 33 smoke assertions + ruff + compileall before the commit. The
+sections below are kept as-written for historical context.
 
 This branch already carries an unrelated step-3 boot-logging fix (`main.py` +
 `start.bat`) that landed BEFORE the slice-3 review — the audit covers it, and
@@ -183,24 +184,29 @@ exactly the early failures the new logging fix was designed to surface.
 - IMPORTANT — `backend/app/api/ws.py:64` inbound WebSocket frames are decoded with no app-level size/rate policy. A malicious local page can send arbitrarily large text frames. Set uvicorn `ws_max_size` explicitly.
 - MINOR — `backend/app/config.py:8` `Settings(BaseModel)` does not read env vars. Comments imply operator-adjustable CORS/host/port/paths, but only `ADMIN_TOKEN` is wired via the `default_factory` hack. Either rename to `pydantic-settings.BaseSettings` or document the limitation.
 
-### Planned fixes (PENDING — apply on VPS in next session)
+### Applied fixes (2026-05-20)
 
 | ID | File(s) | Severity | Source | Change |
 |---|---|---|---|---|
-| F38 | backend/app/supervisor.py | CRITICAL | Claude | Change `disable(exchange, reason)` → `disable(market_id, reason)`; match on `sa.market.market_id` instead of `sa.adapter.exchange_id`. |
-| F39 | backend/app/main.py:114 | CRITICAL | Claude | Update call site: `supervisor.disable(market.market_id, "uncalibrated: ratio not set")`. Combined with F38 this fixes both the over-disable (OKX) and the no-op-disable (hyperliquid) bugs. |
-| F40 | backend/app/api/ws.py | CRITICAL | Claude | Initialize `queue: asyncio.Queue \| None = None` before the try; guard finally with `if queue is not None: aggregator.unsubscribe(queue)`. Wrap `await aggregator.subscribe()` in its own try so connection is closed cleanly on subscribe failure. |
-| F41 | backend/app/aggregator.py + ws.py | IMPORTANT | both | Slow-subscriber drop: in `_broadcast`, when discarding a queue, also `q.put_nowait(None)`. In `_sender`, treat `payload is None` as "close ws and exit". Eliminates the zombie WS failure mode. |
-| F42 | backend/app/api/ws.py | IMPORTANT | codex | Origin check before `ws.accept()`: read `ws.headers.get("origin")`, reject (`await ws.close(code=1008)`) if not in `settings.cors_allow_origins`. Critical for VPS exposure. |
-| F43 | backend/app/main.py | IMPORTANT | codex | Pass `ws_max_size=1 << 20` (1 MiB) to `uvicorn.run` to cap inbound WS frame size. |
-| F44 | backend/app/main.py:30-42 | IMPORTANT | both | Move `RotatingFileHandler(...)` construction INSIDE the existing handler-presence guard. Compare by `getattr(h, 'baseFilename', None)` to detect the same handler. Closes the step-3 file-handle leak. |
-| F45 | backend/app/api/rest.py:37-44 + store.py | IMPORTANT | both | Clamp `seconds = max(1, min(s, settings.history_replay_seconds))`. Add `LIMIT settings.history_max_rows` to `replay_recent`. Reject negative explicitly with 400. |
-| F46 | backend/app/api/rest.py:17,25 | MINOR | both | Constrain `asset_id` Query/Path with `pattern="^[A-Z0-9_-]{1,32}$"` matching admin's `_ASSET_ID_REGEX`. |
-| F47 | backend/app/api/health.py (new /readyz) | IMPORTANT | both | Split: `/livez` constant 200; `/readyz` checks `app.state.aggregator is not None and app.state.supervisor is not None and (any adapter with last_tick_at within stale_threshold_seconds)`. Return 503 otherwise. |
-| F48 | backend/app/main.py:74-129 | IMPORTANT | both | Wrap lifespan startup acquisitions in try/except; on exception, stop each component that was successfully initialized (`with contextlib.suppress(...)`), THEN re-raise. |
-| F49 | backend/app/main.py:85-86 + admin token writer | IMPORTANT | both | Log only `source=env/generated` at INFO. Write actual token to `backend/logs/admin_token.txt` (`os.chmod 0o600` on POSIX, ACL deny-others on Windows). Operator retrieves from the file, not the log. |
-| F50 | backend/app/api/admin.py:52 | IMPORTANT | Claude | Replace `x_admin_token != expected` with `hmac.compare_digest(x_admin_token, expected)` (keep the `not x_admin_token` short-circuit). |
-| F51 | start.bat:32 | IMPORTANT | codex | `if not exist "%~dp0backend\logs" mkdir "%~dp0backend\logs"` BEFORE the `powershell ... Start-Process` line. |
+| F38 | backend/app/supervisor.py | CRITICAL | Claude | `disable(exchange, reason)` → `disable(market_id, reason)`; matches on `sa.market.market_id` so only the targeted market is disabled. Unknown id logs `supervisor_disable_no_match`. |
+| F39 | backend/app/main.py | CRITICAL | Claude | Lifespan now calls `supervisor.disable(market.market_id, …)`. Fixes both the OKX over-disable (siblings stayed up) and the hyperliquid no-op-disable (`exchange_id="hyperliquid"` vs `market.exchange="hl-xyz"`). |
+| F40 | backend/app/api/ws.py | CRITICAL | Claude | `queue` initialized to None before the try; subscribe wrapped in its own try (closes ws with 1011 on failure); finally guards `if queue is not None`. UnboundLocalError path is gone. |
+| F41 | backend/app/aggregator.py + ws.py | IMPORTANT | both | `_broadcast` pushes `None` sentinel into dropped slow-subscriber queue; `_sender` treats `payload is None` as "close ws with 1013 and exit". No more zombie sockets. Subscriber type widened to `Queue[dict \| None]`. |
+| F42 | backend/app/api/ws.py | IMPORTANT | codex | `_origin_allowed` checked before `ws.accept()`; rejects with `close(1008)` if origin not in `settings.cors_allow_origins`. `None` origin allowed only when "null" is listed (file:// / non-browser opt-in). |
+| F43 | backend/app/config.py + main.py | IMPORTANT | codex | New `Settings.ws_max_size_bytes=1<<20`; passed to `uvicorn.run(ws_max_size=...)`. |
+| F44 | backend/app/main.py | IMPORTANT | both | `_configure_logging` checks `getattr(h, "baseFilename", None) == resolve(app.log)` BEFORE constructing the handler. Second call from lifespan no longer leaks a file handle. |
+| F45 | backend/app/api/rest.py + store.py + config.py | IMPORTANT | both | `seconds` clamped to `[1, history_replay_seconds]`; negative → 400. `replay_recent` accepts optional `limit`; rest handler passes `settings.history_max_rows=100_000` (newest-first then re-ordered ASC). |
+| F46 | backend/app/api/rest.py | MINOR | both | `_ASSET_ID_PATTERN = "^[A-Z0-9_-]{1,32}$"` applied as `Path`/`Query` pattern on `/api/assets/{asset_id}`, `/api/markets?asset_id`, `/api/history/{asset_id}`. |
+| F47 | backend/app/api/health.py | IMPORTANT | both | Added `/livez` (const 200) and `/readyz` (503 unless aggregator + supervisor exist AND at least one adapter ticked within `stale_threshold_seconds`). `/health` kept as `/livez` alias for back-compat. |
+| F48 | backend/app/main.py | IMPORTANT | both | Lifespan startup wrapped in try/except; on failure each component started so far is stopped via `contextlib.suppress(Exception)` in reverse order, then exception re-raised. Shutdown path also suppresses per-component to avoid one stop error skipping siblings. |
+| F49 | backend/app/main.py | IMPORTANT | both | New `_persist_admin_token()` writes the token to `backend/logs/admin_token.txt` (0o600 on POSIX; Windows ACL hardening tracked as follow-up). Startup logs only `source=env\|generated` and the path — never the raw token. |
+| F50 | backend/app/api/admin.py | IMPORTANT | Claude | `require_admin_token` uses `hmac.compare_digest`; short-circuits on empty header to avoid the constant-time op on a falsy operand. |
+| F51 | start.bat | IMPORTANT | codex | `if not exist "%~dp0backend\logs" mkdir "%~dp0backend\logs"` added BEFORE the `powershell ... Start-Process` line so `-RedirectStandardError`/`-Output` don't fail silently on a fresh checkout. |
+
+**Verification (2026-05-20):**
+- `python -m ruff check app` → All checks passed
+- `python -m compileall -q app` → clean
+- `python smoke_slice3.py` → 33 PASS assertions, ALL SMOKE TESTS PASSED. Smoke script lives at `backend/smoke_slice3.py`; runs against a `TemporaryDirectory` copy of `backend/data/` and `tempfile.TemporaryDirectory(ignore_cleanup_errors=True)` so the locked `app.log` (opened by F44 test) doesn't block teardown on Windows. Per slice-2 lesson, no tracked data files are touched.
 
 **Deferred to slice 4 or later (MINOR — record but do not apply):**
 - `rest.py:20,42` — reflected `asset_id` in `HTTPException(detail=...)` (CR/LF could land in structured logs; minor).
