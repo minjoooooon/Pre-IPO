@@ -1,0 +1,5 @@
+# Shell scripts must keep LF line endings — bash on Linux refuses CRLF.
+# Without this, the autocrlf=true that Git for Windows ships by default
+# would rewrite checkouts to CRLF and ./start.sh on the VPS would fail
+# with `bad interpreter: /usr/bin/env^M: no such file or directory`.
+*.sh text eol=lf

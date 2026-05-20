@@ -6,8 +6,12 @@ from pydantic import BaseModel, Field
 
 
 class Settings(BaseModel):
-    host: str = "127.0.0.1"
-    port: int = 8000
+    # `HOST` / `PORT` env vars are honored at import so the VPS deployment can
+    # listen on 0.0.0.0:<port> without editing source. Default stays loopback —
+    # exposing publicly is an explicit operator decision. (Full BaseSettings
+    # migration is deferred — only the network-binding knobs are wired here.)
+    host: str = Field(default_factory=lambda: os.environ.get("HOST") or "127.0.0.1")
+    port: int = Field(default_factory=lambda: int(os.environ.get("PORT") or 8000))
 
     # /api/admin/* is gated behind an X-Admin-Token header. The default is
     # taken from the ADMIN_TOKEN env var; if unset, a random token is
