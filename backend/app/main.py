@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
 from .adapters.gate import GateAdapter
@@ -104,6 +105,10 @@ _ADAPTER_CLASSES = {
     # hyperliquid hl-xyz / hl-vntl above).
     "bingx": BingXAdapter,
     "bingx-prestocks": BingXAdapter,
+    # Binance USDⓈ-M Futures pre-IPO perp (contractType=TRADIFI_PERPETUAL,
+    # underlyingType=PREMARKET). Currently SPCXUSDT only; OPENAI/ANTHROPIC
+    # not yet listed on Binance Futures as of 2026-05-21.
+    "binance": BinanceAdapter,
 }
 
 
