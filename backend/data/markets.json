@@ -293,6 +293,20 @@
       "confidence": 45,
       "doc_url": "https://www.bitmart.com/futures/en?symbol=ANTHROPICUSDT",
       "notes": "[discover 2026-05-21] BitMart Contract 1B-basis valuation perp — the DEEPEST Anthropic venue we now track. baseCurrency=ANTHROPIC, contractSize=0.001, funding_interval_hours=1. Probe 2026-05-21: last=$1282.9, idx=$1158.8 (~10% gap — perp at premium), vol24=$3.10M turnover, OI=$480K (open_interest_value), fundingRate=0.0054% (non-zero perp mechanism). share_ratio=1.79 mirrors the 1B-basis cluster (OKX/hl-vntl). Sanity at $1282.9: implied_FDV = (1282.9/1.79)*1.79B ≈ $1.28T (vs hl-vntl $1.20T = +7.3%, vs MEXC $1.66T = -22.7%; sits between cluster median and MEXC outlier — confirms the 1B-basis interpretation while still showing positive premium). Confidence 45 (deepest venue + non-zero funding empirically confirms basis). Trigger for recalibration: divergence >5% sustained vs 1B-basis cluster median."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "bitget-futures",
+      "symbol": "SPCXUSDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 45,
+      "doc_url": "https://www.bitget.com/futures/usdt/SPCXUSDT",
+      "notes": "[discover 2026-05-21] Bitget USDT-M Futures pre-IPO RWA perp (distinct from Bitget's spot PRESPAXUSDT — same trick as bitget vs bitget-futures exchange keys, different endpoint trees /api/v2/spot/market/* vs /api/v2/mix/market/*). Contract metadata: isRwa='YES' (confirms pre-IPO RWA), symbolType='perpetual', sizeMultiplier=0.01, fundInterval=8h, openTime=1779337426442 (2026-05-21 09:23 UTC — listed same day as Binance SPCXUSDT). Live data: GET https://api.bitget.com/api/v2/mix/market/ticker?productType=USDT-FUTURES&symbol=SPCXUSDT → {lastPr, bidPr, askPr, quoteVolume[USDT], holdingAmount[base], markPrice, indexPrice, fundingRate}. Probe 2026-05-21: last=$212.74, mark=$212.66, idx=$212.57, vol24=$5.46M (much deeper than Bitget spot PRESPAXUSDT $2.07M — perp has displaced spot as the primary Bitget venue), holdingAmount=7477.4 × 0.01 × $212.66 ≈ $15.9K OI, fundingRate=0 (currently flat, but real perp mechanism so can move). share_ratio=1.0 mirrors the stock-style family (hl-xyz/Binance/MEXC-stock); price $212.74 fits within 0.4% of Binance $211.97 and MEXC-stock $212.3. Four stock-style venues now agree on basis (hl-xyz + Binance + MEXC-stock + Bitget-futures) — confidence bumped to 45 (matches MEXC-stock). Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from stock-style cluster median."
     }
   ]
 }

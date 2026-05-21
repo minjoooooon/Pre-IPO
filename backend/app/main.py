@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
+from .adapters.bitget_futures import BitgetFuturesAdapter
 from .adapters.bitmart import BitMartAdapter
 from .adapters.mexc import MEXCAdapter
 from .adapters.gate import GateAdapter
@@ -123,6 +124,11 @@ _ADAPTER_CLASSES = {
     # OI + funding + funding_interval_hours; funding cycle is 1h on
     # BitMart pre-IPO contracts (not the 8h default).
     "bitmart": BitMartAdapter,
+    # Bitget USDT-M Futures pre-IPO RWA perp (isRwa=YES, different
+    # endpoint tree from Bitget spot — /api/v2/mix/market/* vs /api/v2/
+    # spot/market/*). Currently SPCXUSDT only; OPENAI/ANTHROPIC not yet
+    # on Bitget futures as of 2026-05-21.
+    "bitget-futures": BitgetFuturesAdapter,
 }
 
 
