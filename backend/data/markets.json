@@ -251,6 +251,48 @@
       "confidence": 30,
       "doc_url": "https://www.mexc.com/futures/ANTHROPIC_USDT",
       "notes": "[discover 2026-05-21] MEXC Contract 1B-basis valuation perp. displayNameEn='ANTHROPIC_USDT PERPETUAL', baseCoin='ANTHROPIC', contractSize=0.001. Probe 2026-05-21: last=$1657.1, fair=$1657.7, idxPrice=$1650.3, vol24=$79K, holdVol=67943 × 0.001 × $1657.1 ≈ $113K OI, fundingRate=0 (8h cycle, valuation-perp convention). share_ratio=1.79 assumes the same 1B-basis methodology as OKX/hl-vntl ANTHROPIC venues. ⚠️ OUTLIER: at $1657.1, implied_FDV = (1657.1/1.79)*1.79B ≈ $1.66T, which is +38% premium vs the 1B-basis cluster (hl-vntl $1196 → $1.20T). fundingRate=0 means retail FOMO can drift the price away from index without arbitrage pressure. Same basis-vs-premium ambiguity as MEXC OPENAI — at conf=30 until BitMart cross-check or MEXC spec resolves it. Trigger for recalibration: same as MEXC OPENAI."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "bitmart",
+      "symbol": "SPACEXUSDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 11.87,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://www.bitmart.com/futures/en?symbol=SPACEXUSDT",
+      "notes": "[discover 2026-05-21] BitMart Contract pre-IPO 1B-basis valuation perp (tradfi_info{market_group=US_MARKET, market_session_status=2}, status=Trading). baseCurrency=SPACEX, quoteCurrency=USDT, contractSize=0.001, funding_interval_hours=1 (NOT 8 — BitMart pre-IPO perps run 1h funding cycles, unlike most CEX perps). Live data: GET https://api-cloud-v2.bitmart.com/contract/public/details?symbol=SPACEXUSDT (single endpoint returns last_price + turnover_24h[USDT] + open_interest_value[USDT] + funding_rate + funding_interval_hours + index_price) + /contract/public/depth for top bid/ask. Probe 2026-05-21: last=$2404.8, idx=$2406.9, vol24=$582K turnover, OI=$622K (BitMart's published open_interest_value, trusted directly), fundingRate=0 (actual perp mechanism — BitMart runs non-zero funding on OPENAI/ANTHROPIC but here pinned to zero, likely because SPACEXUSDT is close to index). share_ratio=11.87 mirrors the 1B-basis cluster (OKX/hl-vntl/BingX-VNTL/MEXC). Sanity at $2404.8: implied_FDV = (2404.8/11.87)*11.87B ≈ $2.40T (vs MEXC $2.41T = -0.4%, vs OKX $2.27T = +5.9%; clean fit). Trigger for recalibration: divergence >5% sustained vs the 1B-basis cluster median."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "bitmart",
+      "symbol": "OPENAIUSDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 45,
+      "doc_url": "https://www.bitmart.com/futures/en?symbol=OPENAIUSDT",
+      "notes": "[discover 2026-05-21] BitMart Contract 1B-basis valuation perp — the DEEPEST OpenAI venue we now track. baseCurrency=OPENAI, contractSize=0.001, funding_interval_hours=1. Probe 2026-05-21: last=$1208.4, idx=$1111.3 (~8% gap — perp at premium to index), vol24=$3.64M turnover (vs BingX-VNTL $6.23M but with much wider orderbook spread), OI=$174K (open_interest_value), fundingRate=0.0046% (non-zero, real perp mechanism — funding pressure pushes price toward index). share_ratio=2.4 mirrors the 1B-basis cluster (OKX/hl-vntl/BingX-VNTL all at $1180). Sanity at $1208.4: implied_FDV = (1208.4/2.4)*2.4B ≈ $1.208T (vs hl-vntl $1.18T = +2.4%, vs BingX-VNTL $1.18T = +2.3% — clean fit, much tighter than MEXC's +25% outlier). Confidence bumped to 45 (vs hl-vntl/BingX-VNTL's 30/40) because BitMart's non-zero funding rate + clean price cluster confirms the 1B-basis assumption empirically. Trigger for recalibration: divergence >5% sustained vs 1B-basis cluster (would suggest BitMart drifting to a different basis)."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "bitmart",
+      "symbol": "ANTHROPICUSDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.79,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 45,
+      "doc_url": "https://www.bitmart.com/futures/en?symbol=ANTHROPICUSDT",
+      "notes": "[discover 2026-05-21] BitMart Contract 1B-basis valuation perp — the DEEPEST Anthropic venue we now track. baseCurrency=ANTHROPIC, contractSize=0.001, funding_interval_hours=1. Probe 2026-05-21: last=$1282.9, idx=$1158.8 (~10% gap — perp at premium), vol24=$3.10M turnover, OI=$480K (open_interest_value), fundingRate=0.0054% (non-zero perp mechanism). share_ratio=1.79 mirrors the 1B-basis cluster (OKX/hl-vntl). Sanity at $1282.9: implied_FDV = (1282.9/1.79)*1.79B ≈ $1.28T (vs hl-vntl $1.20T = +7.3%, vs MEXC $1.66T = -22.7%; sits between cluster median and MEXC outlier — confirms the 1B-basis interpretation while still showing positive premium). Confidence 45 (deepest venue + non-zero funding empirically confirms basis). Trigger for recalibration: divergence >5% sustained vs 1B-basis cluster median."
     }
   ]
 }

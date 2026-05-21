@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
+from .adapters.bitmart import BitMartAdapter
 from .adapters.mexc import MEXCAdapter
 from .adapters.gate import GateAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
@@ -117,6 +118,11 @@ _ADAPTER_CLASSES = {
     # markets (same trick as bingx/bingx-prestocks above).
     "mexc": MEXCAdapter,
     "mexc-stock": MEXCAdapter,
+    # BitMart Contract pre-IPO perps (tradfi_info populated). Single
+    # endpoint /contract/public/details returns price + USDT vol + USDT
+    # OI + funding + funding_interval_hours; funding cycle is 1h on
+    # BitMart pre-IPO contracts (not the 8h default).
+    "bitmart": BitMartAdapter,
 }
 
 
