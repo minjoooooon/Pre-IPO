@@ -2,7 +2,7 @@
   "assets": [
     {
       "id": "SPACEX",
-      "ticker": "SPX.PRE",
+      "ticker": "SPACEX",
       "name": "SpaceX",
       "sector": "Aerospace / Space",
       "fully_diluted_shares": 11870000000,
@@ -20,7 +20,7 @@
     },
     {
       "id": "OPENAI",
-      "ticker": "OAI.PRE",
+      "ticker": "OPENAI",
       "name": "OpenAI",
       "sector": "AI / Foundation Models",
       "fully_diluted_shares": 2400000000,
@@ -38,7 +38,7 @@
     },
     {
       "id": "ANTHROPIC",
-      "ticker": "ANT.PRE",
+      "ticker": "ANTHROPIC",
       "name": "Anthropic",
       "sector": "AI / Foundation Models",
       "fully_diluted_shares": 1790000000,
