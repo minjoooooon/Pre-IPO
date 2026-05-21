@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
+from .adapters.mexc import MEXCAdapter
 from .adapters.gate import GateAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
 from .adapters.okx import OkxAdapter
@@ -109,6 +110,13 @@ _ADAPTER_CLASSES = {
     # underlyingType=PREMARKET). Currently SPCXUSDT only; OPENAI/ANTHROPIC
     # not yet listed on Binance Futures as of 2026-05-21.
     "binance": BinanceAdapter,
+    # MEXC Contract (Futures) lists two SPACEX variants under one platform —
+    # the 1B-basis valuation perp (SPACEX_USDT) and the stock-style perp
+    # (SPCXSTOCK_USDT). They share the MEXCAdapter class but get distinct
+    # exchange keys so the supervisor registers them as independent
+    # markets (same trick as bingx/bingx-prestocks above).
+    "mexc": MEXCAdapter,
+    "mexc-stock": MEXCAdapter,
 }
 
 

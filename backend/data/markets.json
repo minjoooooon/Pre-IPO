@@ -195,6 +195,62 @@
       "confidence": 40,
       "doc_url": "https://www.binance.com/en/futures/SPCXUSDT",
       "notes": "[discover 2026-05-21] Binance USDⓈ-M Futures pre-IPO perp. exchangeInfo: contractType='TRADIFI_PERPETUAL', underlyingType='PREMARKET', underlyingSubType=['Pre-IPO'], baseAsset='SPCX', quoteAsset='USDT', onboardDate=1779338700000 (2026-05-21 09:25 UTC — listed today). Live data: GET https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=SPCXUSDT (lastPrice, quoteVolume) + /fapi/v1/ticker/bookTicker (bid/ask) + /fapi/v1/openInterest (base-asset units, MUST multiply by price) + /fapi/v1/premiumIndex (lastFundingRate, nextFundingTime — 8h cadence). Probe 2026-05-21: last=$211.97, mark=$211.89, bid/ask=$211.81/$211.86, vol24=$51.6M (deepest SPACEX venue by far), OI=59,760.91 SPCX × $211.89 ≈ $12.66M USD, lastFundingRate=0.00005 (8h interval). share_ratio=1.0 mirrors the hl-xyz stock-style convention (1 token ≈ 1 actual share at IPO conversion); confidence=40 (one notch above hl-xyz's 30 because two stock-style venues — Binance + hl-xyz — now agree on the basis, same logic as BingX(VNTL) confidence bump). Sanity at $211.89: implied_FDV = 211.89 * 11.87B ≈ $2.515T (vs hl-xyz $198.98 → $2.36T, ~6.5% premium; vs OKX $2.27T, ~10.7% premium — consistent with launch-day premium on a thin orderbook). IMPORTANT vs BingX: Binance openInterest is denominated in BASE asset (SPCX), not USDT — adapter multiplies by last price. BingX returns USDT-denominated OI directly. Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from hl-xyz price for >30min."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "mexc",
+      "symbol": "SPACEX_USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 11.87,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://www.mexc.com/futures/SPACEX_USDT",
+      "notes": "[discover 2026-05-21] MEXC Contract (Futures) 1B-basis valuation perp. displayNameEn='SPACEX_USDT PERPETUAL', baseCoin='SPACEX', contractSize=0.001. Live data: GET https://contract.mexc.com/api/v1/contract/ticker?symbol=SPACEX_USDT → {lastPrice, bid1, ask1, amount24[USDT], volume24[contracts], holdVol[contracts], fairPrice[mark], indexPrice, fundingRate}. Probe 2026-05-21: last=$2406.6, fair=$2406.6, vol24=$940K, holdVol=392198 × 0.001 × $2406.6 ≈ $943K OI, fundingRate=0 (8h cycle, valuation-perp convention — index-anchored, no funding pressure to enforce convergence). share_ratio=11.87 mirrors OKX/hl-vntl/BingX(VNTL) 1B-basis convention. Sanity at $2406.6: implied_FDV = (2406.6/11.87)*11.87B ≈ $2.41T (vs OKX $2.27T = +6.2%, vs hl-vntl $2.13T = +13%, vs BingX-VNTL $2.13T = +13%; MEXC sits at the high end of the 1B-basis cluster). Same Ventuals-family methodology as those venues. Trigger for recalibration: MEXC publishing official basis spec OR sustained >10% divergence from the 1B-basis cluster median."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "mexc-stock",
+      "symbol": "SPCXSTOCK_USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.0,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 45,
+      "doc_url": "https://www.mexc.com/futures/SPCXSTOCK_USDT",
+      "notes": "[discover 2026-05-21] MEXC Contract stock-style perp (separate from MEXC's 1B-basis SPACEX_USDT — same trick as bingx vs bingx-prestocks). displayNameEn='SPCX_USDT PERPETUAL' (the contract is named SPCXSTOCK internally but displays as SPCX), baseCoin='SPCXSTOCK', contractSize=0.01. Live data: GET https://contract.mexc.com/api/v1/contract/ticker?symbol=SPCXSTOCK_USDT. Probe 2026-05-21: last=$212.3, vol24=$181K, holdVol=90888 × 0.01 × $212.3 ≈ $193K OI, fundingRate=5e-05 (running normal funding mechanism, unlike the index-anchored valuation perp). share_ratio=1.0 mirrors the hl-xyz/Binance stock-style convention. Sanity at $212.3: implied_FDV = 212.3 × 11.87B ≈ $2.52T (vs Binance $211.89 → $2.515T = +0.2%, vs hl-xyz $198.98 → $2.36T = +6.7%; clean fit in the stock-style cluster). Three stock-style venues (Binance + hl-xyz + MEXC) now agree on the basis — confidence bumped to 45 (vs Binance's 40 / hl-xyz's 30). Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from the stock-style cluster median."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "mexc",
+      "symbol": "OPENAI_USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://www.mexc.com/futures/OPENAI_USDT",
+      "notes": "[discover 2026-05-21] MEXC Contract 1B-basis valuation perp. displayNameEn='OPENAI_USDT PERPETUAL', baseCoin='OPENAI', contractSize=0.001. Probe 2026-05-21: last=$1476.4, fair=$1484.9, vol24=$117K, holdVol=95888 × 0.001 × $1476.4 ≈ $142K OI, fundingRate=0 (8h cycle, valuation-perp convention). share_ratio=2.4 assumes the same 1B-basis methodology as OKX/hl-vntl/BingX(VNTL) OPENAI venues. ⚠️ OUTLIER: at $1476.4, implied_FDV = (1476.4/2.4)*2.4B ≈ $1.476T, which is +25% premium vs the 1B-basis cluster (OKX $1180 → $1.18T, hl-vntl $1180 → $1.18T, BingX-VNTL $1181 → $1.18T). fundingRate=0 means no mechanism enforces price convergence; possible MEXC uses a different basis (e.g. 0.8B → ratio=3.0 would back-solve to $1.18T) but we have no docs to confirm. Confidence intentionally low (30) until either MEXC publishes spec or sustained-arb behavior reveals true basis. Trigger for recalibration: BitMart/MEXC price spread shrinking on volume (would confirm 2.4) OR a coordinated drift (would confirm a different basis)."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "mexc",
+      "symbol": "ANTHROPIC_USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 1.79,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-21T00:00:00Z",
+      "confidence": 30,
+      "doc_url": "https://www.mexc.com/futures/ANTHROPIC_USDT",
+      "notes": "[discover 2026-05-21] MEXC Contract 1B-basis valuation perp. displayNameEn='ANTHROPIC_USDT PERPETUAL', baseCoin='ANTHROPIC', contractSize=0.001. Probe 2026-05-21: last=$1657.1, fair=$1657.7, idxPrice=$1650.3, vol24=$79K, holdVol=67943 × 0.001 × $1657.1 ≈ $113K OI, fundingRate=0 (8h cycle, valuation-perp convention). share_ratio=1.79 assumes the same 1B-basis methodology as OKX/hl-vntl ANTHROPIC venues. ⚠️ OUTLIER: at $1657.1, implied_FDV = (1657.1/1.79)*1.79B ≈ $1.66T, which is +38% premium vs the 1B-basis cluster (hl-vntl $1196 → $1.20T). fundingRate=0 means retail FOMO can drift the price away from index without arbitrage pressure. Same basis-vs-premium ambiguity as MEXC OPENAI — at conf=30 until BitMart cross-check or MEXC spec resolves it. Trigger for recalibration: same as MEXC OPENAI."
     }
   ]
 }
