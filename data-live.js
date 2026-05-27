@@ -17,14 +17,15 @@
   "use strict";
 
   const WS_URL = (function () {
-    // If served from FastAPI (port 8000), use same-origin. Else (file://,
-    // static :8080 dev, etc.) fall back to backend on localhost:8000.
+    // Single-process deploy: HTML and WebSocket are co-served by the same
+    // FastAPI process (any port — 8001 on VPS, 8000 in local dev), so use
+    // same-origin whenever the page was served over http(s). Only fall back
+    // to a fixed backend for file:// origins.
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    if (window.location.hostname && window.location.port === "8000") {
+    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
       return `${proto}//${window.location.host}/ws`;
     }
-    const host = window.location.hostname || "127.0.0.1";
-    return `${proto}//${host}:8000/ws`;
+    return `ws://127.0.0.1:8001/ws`;
   })();
 
   const RING_POINTS = 96;

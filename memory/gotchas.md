@@ -9,6 +9,18 @@ Format:
 
 ---
 
+- **2026-05-27** — Trusted Bitget Republic mirror-credit disclosure
+  ("1 token = 1 unit of post-IPO stock performance") at face value
+  and set `share_ratio=1.0` for `OPENAI:bitget` (and earlier for
+  `SPACEX:bitget`). The 1:1 holds **only at/after IPO conversion**;
+  the live preXXX price is denominated against an undisclosed share
+  basis that must be back-solved from the published subscription
+  anchor. → **Rule**: For any Bitget IPO Prime preXXX token (or any
+  Republic mirror-credit instrument), `ratio_source` must be
+  `back-solved`, derived as `fully_diluted_shares / (announced_FDV /
+  subscription_price)`. Never accept `ratio=1.0, source=official` for
+  these — that's the misread to fix.
+
 <!--
 Examples:
 

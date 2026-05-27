@@ -62,7 +62,7 @@
       "symbol": "SPCX_USDT",
       "venue": "CEX",
       "structure": "pre-ipo-certificate",
-      "share_ratio": 5.01,
+      "share_ratio": 1.002,
       "ratio_source": "back-solved",
       "ratio_reference_fdv": 1400000000000.0,
       "ratio_calibrated_at": "2026-04-20T00:00:00Z",
@@ -90,13 +90,13 @@
       "symbol": "PREOPAIUSDT",
       "venue": "CEX",
       "structure": "mirror-credit",
-      "share_ratio": 1.0,
-      "ratio_source": "official",
-      "ratio_reference_fdv": null,
-      "ratio_calibrated_at": "2026-05-18T14:06:25.048297Z",
-      "confidence": 70,
+      "share_ratio": 1.9371,
+      "ratio_source": "back-solved",
+      "ratio_reference_fdv": 898210000000.0,
+      "ratio_calibrated_at": "2026-05-12T00:00:00Z",
+      "confidence": 65,
       "doc_url": "https://www.bitget.com/blog/articles/bitget-ipo-prime",
-      "notes": "Probe 2026-05-18: preOPAI spot listing, last~$884, quoteVol24~$817K. Republic mirror-credit pattern (same as preSPAX). | [calibrated 2026-05-18] Bitget IPO Prime / Republic mirror-credit structure: 1 token = 1 unit of OPENAI post-IPO stock performance. ratio=1.0, source=official, confidence=70."
+      "notes": "[recalibrated 2026-05-27] Bitget IPO Prime preOPAI subscription (2026-05-12 to 05-15) published 1 preOPAI = $725, total supply 29,082, raise ≈ $21.08M, 'implied OpenAI valuation $898.21B' (per crypto.news / Bitget IPO Prime announcement). Same Republic mirror-credit pattern as preSPAX — 1:1 with public stock applies AT/AFTER conversion, NOT to the pre-IPO mirror price. Bitget does not publish an explicit share-count denominator; back-solve from subscription anchor: implicit_basis = 898.21B / 725 ≈ 1.239B; share_ratio = fully_diluted_shares / implicit_basis = 2.4B / 1.239B ≈ 1.937. Sanity at P=$725: implied_FDV = (725/1.937)*2.4B ≈ $898.2B ✓. Prior calibration (ratio=1.0, source=official, conf=70) misread the Republic mirror disclosure as 1:1 with shares — same mistake fixed for SPCX:bitget on 2026-05-20 (preSPAX → ratio 5.14). Live: REST GET https://api.bitget.com/api/v2/spot/market/tickers?symbol=PREOPAIUSDT. Probe 2026-05-27: last~$1012 → implied FDV ≈ $1.254T (cross-checks against cluster median $1.37-1.46T; Bitget tracks lower-edge consistently with SPCX:bitget pattern). Trigger for recalibration: when OpenAI files S-1 / IPO completes, Republic mirror converts 1:1 to actual public shares — bump share_ratio to fully_diluted_shares / actual_post-IPO_share_count and refresh ratio_calibrated_at."
     },
     {
       "asset_id": "ANTHROPIC",
@@ -195,6 +195,20 @@
       "confidence": 40,
       "doc_url": "https://www.binance.com/en/futures/SPCXUSDT",
       "notes": "[discover 2026-05-21] Binance USDⓈ-M Futures pre-IPO perp. exchangeInfo: contractType='TRADIFI_PERPETUAL', underlyingType='PREMARKET', underlyingSubType=['Pre-IPO'], baseAsset='SPCX', quoteAsset='USDT', onboardDate=1779338700000 (2026-05-21 09:25 UTC — listed today). Live data: GET https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=SPCXUSDT (lastPrice, quoteVolume) + /fapi/v1/ticker/bookTicker (bid/ask) + /fapi/v1/openInterest (base-asset units, MUST multiply by price) + /fapi/v1/premiumIndex (lastFundingRate, nextFundingTime — 8h cadence). Probe 2026-05-21: last=$211.97, mark=$211.89, bid/ask=$211.81/$211.86, vol24=$51.6M (deepest SPACEX venue by far), OI=59,760.91 SPCX × $211.89 ≈ $12.66M USD, lastFundingRate=0.00005 (8h interval). share_ratio=1.0 mirrors the hl-xyz stock-style convention (1 token ≈ 1 actual share at IPO conversion); confidence=40 (one notch above hl-xyz's 30 because two stock-style venues — Binance + hl-xyz — now agree on the basis, same logic as BingX(VNTL) confidence bump). Sanity at $211.89: implied_FDV = 211.89 * 11.87B ≈ $2.515T (vs hl-xyz $198.98 → $2.36T, ~6.5% premium; vs OKX $2.27T, ~10.7% premium — consistent with launch-day premium on a thin orderbook). IMPORTANT vs BingX: Binance openInterest is denominated in BASE asset (SPCX), not USDT — adapter multiplies by last price. BingX returns USDT-denominated OI directly. Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from hl-xyz price for >30min."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "binance",
+      "symbol": "OPENAIUSDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-05-26T00:00:00Z",
+      "confidence": 40,
+      "doc_url": "https://www.binance.com/en/futures/OPENAIUSDT",
+      "notes": "[discover 2026-05-26] Binance USDⓈ-M Futures listed OPENAIUSDT between 2026-05-21 (prior probe found only SPCXUSDT) and 2026-05-26 (today). exchangeInfo: contractType='TRADIFI_PERPETUAL', underlyingType='PREMARKET', underlyingSubType=['Pre-IPO'], baseAsset='OPENAI', quoteAsset='USDT', onboardDate=1779784200000 (2026-05-26 13:10 UTC), status='TRADING'. Live data via same 4-endpoint REST poll as SPCXUSDT (ticker/24hr, bookTicker, openInterest, premiumIndex). Probe 2026-05-26: last=$1464.16, bid/ask=$1463.61/$1464.16, vol24=$36.25M quoteVolume, OI=3392.50 OPENAI × $1464 ≈ $4.97M USD, lastFundingRate=0.00005 (8h). share_ratio=2.4 chosen to match the 1B-basis cluster (OKX/Bitget/BingX/MEXC/BitMart all use 2.4); empirical cross-check at $1464: implied_FDV = (1464/2.4)*2.4B ≈ $1.46T, within 5% of OKX/BitMart cluster median ~$1.20T (Binance launch-week premium ~20%, consistent with thin OI). Diverges from SPACEX:binance's ratio=1.0 (stock-style) — kept on 1B-basis for OPENAI because the OPENAI 1B-basis convention is published by OKX and all other listings agree, whereas SPACEX has dual conventions (hl-xyz stock + hl-vntl/OKX 1B). Reconciliation work TBD: may need to revisit SPACEX:binance to ratio=11.87 if launch-week price stabilizes near $2400 (1B-basis) rather than $211 (stock-style)."
     },
     {
       "asset_id": "SPACEX",

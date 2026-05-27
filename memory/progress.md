@@ -12,14 +12,23 @@ changed but this file wasn't updated.
 
 ## Completed (this session)
 
-<!--
-- [x] <task> — <one-line note on what was verified>
--->
+- [x] Pull `origin/main` (e925a1c → cb1f52b, 19 commits, markets 8 → 22) — stashed VPS work first, pulled fast-forward, then dropped stash after re-applying surviving deltas. Safety tag `vps-2026-05-26-pre-pull` left at the pre-pull HEAD for rollback.
+- [x] Enable OPENAI on Binance adapter — `backend/app/adapters/binance.py` line 51: `_ASSET_TO_BINANCE_SYMBOLS["OPENAI"]` flipped from `[]` to `["OPENAIUSDT"]`. The remote's 2026-05-21 probe found it not-yet-listed; the 2026-05-26 probe confirmed it active ($1466, OI $4.9M, vol $36M). Verified via `python -c "asyncio.run(adapter.discover('OPENAI'))"` → found=True.
+- [x] Add OPENAI:binance market — `backend/data/markets.json` total 22 → 23. `share_ratio=2.4` (1B-basis, matches every other OPENAI listing); `market-fitted/conf=40` (consistent with SPACEX:binance pattern). Notes carry empirical cross-check: at $1464 → implied_FDV $1.46T, within +20% of OKX/Bitget/BingX/MEXC/BitMart cluster median ($1.2T — launch-week premium on thin OI is expected).
+- [x] Expand footer data-feeds line — `app.jsx` line 2101 now lists all 9 feeds (OKX/Binance/BingX/Bitget/Bitget Futures/MEXC/BitMart/Gate/Hyperliquid REST). Pulled remote still had the old 3-feed text.
+- [x] Restart server via newly-pulled `start.sh` (HOST=0.0.0.0 PORT=8001) — pid 440421. Verified `/health` → 200 `{"status":"ok"}`; `/api/status` shows binance `connected ×2`; WS `/ws` snapshot includes OPENAI:binance (96-pt history, implied_FDV $1.47T) and SPACEX:binance ($2.39T).
+- [x] Re-patch frontend port assumption (got reset by the pull) — `data-live.js` WS_URL and `app.jsx` API_BASE both assumed port 8000; on the VPS we serve from 8001, so the frontend was trying `ws://158.247.219.35:8000/ws` (where a different process listens). Symptom: page loads but stays on "Waiting for live snapshot…" forever. Fixed by switching both to same-origin under http(s) (port-agnostic), keeping a file:// fallback. Verified that the FastAPI FileResponse handlers serve the patched files immediately (no caching layer).
+- [x] Fix WS Origin rejection — pulled `backend/app/api/ws.py` added an `_origin_allowed()` check that enforces `settings.cors_allow_origins` on the WebSocket upgrade (CORS middleware doesn't cover WS). Default list only had `localhost`/`127.0.0.1` + `null`, so browsers loading from `http://158.247.219.35:8001` got HTTP 403 on the WS handshake (curl/python clients passed because they didn't send Origin). Symptom in DevTools: `WebSocket connection to 'ws://158.247.219.35:8001/ws' failed`, repeating reconnects. Made `Settings.cors_allow_origins` env-aware (reads `CORS_ALLOW_ORIGINS` CSV when set, else the original default list). Restarted via `HOST=0.0.0.0 PORT=8001 CORS_ALLOW_ORIGINS="http://158.247.219.35:8001,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080,null" ./start.sh` — new pid 485037. Verified `/proc/485037/environ` contains the CORS line, WS handshake with `Origin: http://158.247.219.35:8001` returns the 682KB snapshot, and `http://evil.example` is correctly REJECTED with HTTP 403.
+- [x] Gate SPCX value ×5 (user request "밸류만 5배") — `backend/data/markets.json:65` `SPACEX:gate` `share_ratio` 5.01 → 1.002. `ratio_reference_fdv` left at 1.4T (anchor unchanged; only display multiplier shifted). Verified live: raw token $789.23 stays the same, normalized_price $157 → $787, implied_FDV $1.87T → $9.35T. Restarted server via `./stop.sh` + `HOST=0.0.0.0 PORT=8001 CORS_ALLOW_ORIGINS="..." ./start.sh`, pid 1690399.
+- [x] Bitget OPENAI cluster reconciliation — `backend/data/markets.json:93` `OPENAI:bitget` was outlier at $2.43T vs cluster $1.37-1.46T because prior calibration trusted Republic mirror disclosure as 1:1 with shares. Pulled Bitget IPO Prime preOPAI anchor (subscription 2026-05-12, $725/token, 29,082 supply, announced "implied OpenAI valuation $898.21B" per crypto.news + GlobeNewswire). Back-solved same way as SPCX:bitget: implicit_basis = 898.21B/725 ≈ 1.239B → `share_ratio` 1.0 → **1.9371**, `ratio_source` official → back-solved, `ratio_reference_fdv` null → 898.21B, `confidence` 70 → 65. Verified post-restart (pid 1721858): Bitget OPENAI implied_FDV $2.43T → $1.25T (lower-edge of cluster, consistent with SPCX:bitget's lower-edge tracking pattern). Pattern added to `memory/gotchas.md`.
 
 ## Backlog (next up)
 
+- [ ] User to verify in browser tomorrow — hard-refresh (Ctrl+Shift+R) at `http://158.247.219.35:8001/`. Server pid 485037 is left running on port 8001 with the right CORS origin. If snapshot loads (no "Waiting for live snapshot…"), the chain is done. If not, capture F12 → Console errors and continue from there.
+- [ ] Make the CORS origin survive restarts — current `start.sh` invocation passes `CORS_ALLOW_ORIGINS` inline. Either wrap it in a small `.env` file the launcher sources, or update `start.sh` itself to default to the public IP when `HOST=0.0.0.0`. Without this, the next plain `./start.sh` will lose WS access for browsers.
+
 <!--
-- [ ] <task>
+- [x] <task> — <one-line note on what was verified>
 -->
 
 ## Blocked

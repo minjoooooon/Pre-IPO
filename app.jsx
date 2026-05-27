@@ -827,11 +827,13 @@ function PremiumBars({ norm }) {
 // API helpers (admin write)
 // ============================================================
 const API_BASE = (function() {
-  if (typeof window !== "undefined" && window.location && window.location.port === "8000") {
+  // Single-process deploy: admin API is on the same origin as the page
+  // (whatever port FastAPI is bound to — 8001 on VPS, 8000 in local dev).
+  if (typeof window !== "undefined" && window.location &&
+      (window.location.protocol === "http:" || window.location.protocol === "https:")) {
     return "";
   }
-  const host = (typeof window !== "undefined" && window.location.hostname) || "127.0.0.1";
-  return `http://${host}:8000`;
+  return "http://127.0.0.1:8001";
 })();
 
 // `/api/admin/*` is gated behind X-Admin-Token (backend F49/F50). The operator
@@ -2098,7 +2100,7 @@ function FootBar() {
     <footer className="footbar mono">
       <span>v0.2.0 · normalizer-engine</span>
       <span className="sep">·</span>
-      <span>data feeds: OKX WS · Bitget REST · Hyperliquid (disabled, HIP-3 deferred)</span>
+      <span>data feeds: OKX WS · Binance REST · BingX REST · Bitget REST · Bitget Futures REST · MEXC REST · BitMart REST · Gate REST · Hyperliquid REST</span>
       <span className="sep">·</span>
       <span className="muted">
         {ageSec != null ? `snapshot ${ageSec}s ago` : "snapshot pending"}

@@ -48,7 +48,7 @@ REST_BASE = "https://fapi.binance.com"
 
 _ASSET_TO_BINANCE_SYMBOLS: dict[str, list[str]] = {
     "SPACEX":    ["SPCXUSDT"],
-    "OPENAI":    [],  # not yet listed on Binance Futures as of 2026-05-21
+    "OPENAI":    ["OPENAIUSDT"],  # listed 2026-05-26 probe: TRADIFI_PERPETUAL
     "ANTHROPIC": [],
 }
 

@@ -28,13 +28,17 @@ class Settings(BaseModel):
     # so a malicious browser tab can't reach /api/admin/* even before the token
     # check runs.
     cors_allow_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
-            "null",
-        ]
+        default_factory=lambda: (
+            [o.strip() for o in os.environ["CORS_ALLOW_ORIGINS"].split(",") if o.strip()]
+            if os.environ.get("CORS_ALLOW_ORIGINS")
+            else [
+                "http://localhost:8000",
+                "http://127.0.0.1:8000",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "null",
+            ]
+        )
     )
 
     # paths
