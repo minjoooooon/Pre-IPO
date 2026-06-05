@@ -20,7 +20,9 @@ from .adapters.bitmart import BitMartAdapter
 from .adapters.mexc import MEXCAdapter
 from .adapters.gate import GateAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
+from .adapters.lighter import LighterAdapter
 from .adapters.okx import OkxAdapter
+from .adapters.variational import VariationalAdapter
 from .aggregator import Aggregator
 from .api import admin as admin_api
 from .api import health as health_api
@@ -129,6 +131,16 @@ _ADAPTER_CLASSES = {
     # spot/market/*). Currently SPCXUSDT only; OPENAI/ANTHROPIC not yet
     # on Bitget futures as of 2026-05-21.
     "bitget-futures": BitgetFuturesAdapter,
+    # Perp DEXes. Single public REST poll each, no auth:
+    #   lighter      → GET mainnet.zklighter.elliot.ai/api/v1/orderBookDetails
+    #   variational  → GET omni-client-api.../metadata/stats
+    # Wired here so any market rows added later route automatically. The
+    # markets.json rows are intentionally NOT added yet: they need a live
+    # probe (run `python -m app.adapters.lighter` / `.variational` on a host
+    # with open network) to confirm the listing, capture the exact symbol,
+    # and read the calibration anchor price.
+    "lighter": LighterAdapter,
+    "variational": VariationalAdapter,
 }
 
 

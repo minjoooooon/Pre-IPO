@@ -8,9 +8,11 @@ changed but this file wasn't updated.
 
 ## In Progress
 
-- [ ] <!-- current atomic task — only one at a time -->
+- [ ] Live-probe Lighter + Variational on the VPS (`python -m app.adapters.lighter` / `.variational`) → confirm SPACEX/OPENAI/ANTHROPIC listings, capture exact symbols + anchor prices, then add calibrated markets.json rows.
 
 ## Completed (this session)
+
+- [x] Add perp-DEX adapters Lighter + Variational (adapter-only, per user) — new `backend/app/adapters/lighter.py` (zkLighter `GET /api/v1/orderBookDetails`; fields confirmed against elliottech/lighter-python SDK `PerpsOrderBookDetail`: symbol/last_trade_price/daily_quote_token_volume/open_interest) and `backend/app/adapters/variational.py` (Omni `GET /metadata/stats`; defensive key-probing because docs are Cloudflare-blocked — discover() dumps real keys for the first live probe to pin down). Both wired into `app/main.py:_ADAPTER_CLASSES` ("lighter"/"variational"). NO markets.json rows added: this sandbox's network allowlist blocks ALL exchange hosts (binance/hyperliquid/lighter/variational + public proxies → "Host not in allowlist"), so live calibration (symbol + anchor price) must be done on the VPS. Verified: py_compile + ruff clean on both adapters; imports + registry routes resolve in a fresh venv; registry still loads 23 markets / 3 assets (FK intact). Each adapter has a `__main__` probe entrypoint for the VPS run.
 
 - [x] Pull `origin/main` (e925a1c → cb1f52b, 19 commits, markets 8 → 22) — stashed VPS work first, pulled fast-forward, then dropped stash after re-applying surviving deltas. Safety tag `vps-2026-05-26-pre-pull` left at the pre-pull HEAD for rollback.
 - [x] Enable OPENAI on Binance adapter — `backend/app/adapters/binance.py` line 51: `_ASSET_TO_BINANCE_SYMBOLS["OPENAI"]` flipped from `[]` to `["OPENAIUSDT"]`. The remote's 2026-05-21 probe found it not-yet-listed; the 2026-05-26 probe confirmed it active ($1466, OI $4.9M, vol $36M). Verified via `python -c "asyncio.run(adapter.discover('OPENAI'))"` → found=True.
