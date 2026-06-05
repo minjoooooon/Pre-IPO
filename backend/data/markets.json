@@ -321,6 +321,48 @@
       "confidence": 45,
       "doc_url": "https://www.bitget.com/futures/usdt/SPCXUSDT",
       "notes": "[discover 2026-05-21] Bitget USDT-M Futures pre-IPO RWA perp (distinct from Bitget's spot PRESPAXUSDT — same trick as bitget vs bitget-futures exchange keys, different endpoint trees /api/v2/spot/market/* vs /api/v2/mix/market/*). Contract metadata: isRwa='YES' (confirms pre-IPO RWA), symbolType='perpetual', sizeMultiplier=0.01, fundInterval=8h, openTime=1779337426442 (2026-05-21 09:23 UTC — listed same day as Binance SPCXUSDT). Live data: GET https://api.bitget.com/api/v2/mix/market/ticker?productType=USDT-FUTURES&symbol=SPCXUSDT → {lastPr, bidPr, askPr, quoteVolume[USDT], holdingAmount[base], markPrice, indexPrice, fundingRate}. Probe 2026-05-21: last=$212.74, mark=$212.66, idx=$212.57, vol24=$5.46M (much deeper than Bitget spot PRESPAXUSDT $2.07M — perp has displaced spot as the primary Bitget venue), holdingAmount=7477.4 × 0.01 × $212.66 ≈ $15.9K OI, fundingRate=0 (currently flat, but real perp mechanism so can move). share_ratio=1.0 mirrors the stock-style family (hl-xyz/Binance/MEXC-stock); price $212.74 fits within 0.4% of Binance $211.97 and MEXC-stock $212.3. Four stock-style venues now agree on basis (hl-xyz + Binance + MEXC-stock + Bitget-futures) — confidence bumped to 45 (matches MEXC-stock). Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from stock-style cluster median."
+    },
+    {
+      "asset_id": "SPACEX",
+      "exchange": "lighter",
+      "symbol": "SPACEX",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 11.87,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-06-05T04:22:59Z",
+      "confidence": 35,
+      "doc_url": "https://mainnet.zklighter.elliot.ai/api/v1/orderBookDetails",
+      "notes": "[discover 2026-06-05] zkLighter order-book perp DEX. Live probe (`python -m app.adapters.lighter` on VPS): symbol='SPACEX' (market_id=173, status=active), last_trade_price=$2112.0, daily_quote_token_volume=$336K, open_interest=238.88 base × $2112 ≈ $504K USD (base-denominated, ×price per adapter). Fields confirmed against elliottech/lighter-python SDK PerpsOrderBookDetail; adapter unchanged. share_ratio=11.87 = fully_diluted_shares/1e9 (11.87B/1B) — same 1B-basis valuation convention as OKX/hl-vntl/BingX-VNTL/MEXC/BitMart (price in the $1500-2500 band confirms 1B-basis, not stock-style ~$200). Sanity at $2112.0: implied_FDV = (2112.0/11.87)*11.87B ≈ $2.112T — low edge of the 1B-basis SPACEX cluster (hl-vntl/BingX-VNTL $2.13T -0.8%, OKX $2.27T -7%, MEXC $2.41T / BitMart $2.40T -12%). OPENAI/ANTHROPIC NOT listed on Lighter as of 2026-06-05 (192-market universe). Trigger for recalibration: SpaceX S-1 filing or sustained >5% divergence from 1B-basis cluster median."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "variational",
+      "symbol": "OPENAI",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 2.4,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-06-05T04:22:59Z",
+      "confidence": 35,
+      "doc_url": "https://omni-client-api.prod.ap-northeast-1.variational.io/metadata/stats",
+      "notes": "[discover 2026-06-05] Variational Omni pool-backed perp DEX (465-market universe). Live probe (`python -m app.adapters.variational` on VPS): ticker='OPENAI' (name='OpenAI'), mark_price=$1415.51, volume_24h=$887K (USDC), open_interest={long $282K + short $81K} ≈ $364K total notional (USD; verified not base — Σ(long×mark) across universe = $4.4T is absurd), funding_rate=0.05475% per 8h (funding_interval_s=28800). Keys confirmed + adapter trimmed this session (ticker/mark_price/volume_24h/open_interest nested-dict/quotes.base bid-ask/funding percent→fraction). share_ratio=2.4 = fully_diluted_shares/1e9 (2.4B/1B), 1B-basis like every other OPENAI listing. Sanity at $1415.51: implied_FDV = (1415.51/2.4)*2.4B ≈ $1.416T — upper end of the published-1B cluster (Binance $1.46T -3%, MEXC $1.476T -4%, BitMart $1.21T +17%, OKX/hl-vntl/BingX-VNTL $1.18T +20%). Note OPENAI cluster is bimodal: published-1B venues ≈ $1.2-1.48T vs VNTL-mirror ≈ $1.18T; Variational fits the published-1B upper group. Trigger for recalibration: OpenAI S-1 filing or sustained >5% divergence from the published-1B cluster."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "variational",
+      "symbol": "ANTHROPIC",
+      "venue": "DEX",
+      "structure": "perp",
+      "share_ratio": 1.79,
+      "ratio_source": "market-fitted",
+      "ratio_reference_fdv": null,
+      "ratio_calibrated_at": "2026-06-05T04:22:59Z",
+      "confidence": 30,
+      "doc_url": "https://omni-client-api.prod.ap-northeast-1.variational.io/metadata/stats",
+      "notes": "[discover 2026-06-05] Variational Omni pool-backed perp DEX. Live probe (VPS): ticker='ANTHROPIC' (name='Anthropic'), mark_price=$1715.35, volume_24h=$1.72M (USDC), open_interest={long $383K + short $110K} ≈ $493K total notional (USD), funding_rate=0.05475% per 8h (funding_interval_s=28800). Same confirmed-key adapter as OPENAI:variational. share_ratio=1.79 = fully_diluted_shares/1e9 (1.79B/1B), 1B-basis like OKX/hl-vntl ANTHROPIC. ⚠️ HIGH EDGE: at $1715.35, implied_FDV = (1715.35/1.79)*1.79B ≈ $1.715T — above the entire ANTHROPIC cluster (MEXC $1.66T +3%, BitMart $1.28T +34%, hl-vntl $1.20T +43%); sits just past the MEXC outlier. conf=30 (vs OPENAI's 35) because the FDV is at/above the top of the cluster — Anthropic is the thinnest, most-dispersed name we track and Variational prices it richest. Trigger for recalibration: convergence toward cluster median on volume (confirms 1.79) OR Anthropic S-1 filing. SPACEX is NOT listed on Variational (ticker 'SPCX' there is the 'SPAC and New Issue ETF', not SpaceX — false-positive trap, excluded from candidates)."
     }
   ]
 }

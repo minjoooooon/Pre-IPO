@@ -14,13 +14,13 @@ Background:
   Rate limits: 10 req / 10 s per IP, 1000 req/min global → a 5 s poll is
   comfortably inside the budget.
 
-⚠️ SCHEMA NOTE: the Variational docs are behind Cloudflare and could not be
-   fetched during development, so the EXACT JSON key names below are not yet
-   confirmed against a live response. The parser is therefore defensive: it
-   probes a list of candidate keys for each field, and discover() dumps the
-   real keys it sees into DiscoverResult.detail. Run the standalone probe
-   (`python -m app.adapters.variational`) on a host with open network to
-   pin the keys down, then trim the candidate lists.
+SCHEMA NOTE: keys CONFIRMED against a live /metadata/stats probe on the VPS
+   (2026-06-05). The top-level payload is a dict whose `listings` key holds
+   465 per-market dicts. Each listing carries: ticker, name, mark_price,
+   volume_24h (USDC), open_interest ({long_open_interest, short_open_interest},
+   both USD), funding_rate (PERCENT — see _tick_from_listing), funding_interval_s
+   (28800 = 8h), base_spread_bps, and quotes ({base:{bid,ask}, size_1k, size_100k}).
+   discover() still dumps the live keys into DiscoverResult.detail for re-checks.
 
 The Variational symbol for the pre-IPO markets is not hard-coded — discover()
 enumerates the live universe and matches a small candidate set per asset."""
@@ -49,23 +49,27 @@ POLL_INTERVAL_SECONDS = 5.0
 log = structlog.get_logger("app.adapters.variational")
 
 
-# asset_id (uppercase) → candidate tickers Variational might use.
+# asset_id (uppercase) → candidate tickers, confirmed on the 2026-06-05 probe.
+# SPACEX is intentionally NOT mapped to "SPCX"/"SPX": on Variational those are
+# real listings ("SPAC and New Issue ETF" / S&P 500) — a false-positive trap.
+# As of 2026-06-05 SpaceX is not listed on Variational; OPENAI/ANTHROPIC are.
 _ASSET_SYMBOL_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "SPACEX": ("SPACEX", "SPCX", "SPX"),
-    "OPENAI": ("OPENAI", "OPAI"),
-    "ANTHROPIC": ("ANTHROPIC", "ANTH"),
+    "SPACEX": ("SPACEX",),
+    "OPENAI": ("OPENAI",),
+    "ANTHROPIC": ("ANTHROPIC",),
 }
 
-# Candidate keys for the per-listing collection inside the stats payload, and
-# for each field on a listing object. Confirm + trim on the first live probe.
-_LISTING_COLLECTION_KEYS = ("listings", "markets", "per_listing", "listing_stats", "stats")
-_SYMBOL_KEYS = ("ticker", "symbol", "name", "instrument", "market")
-_PRICE_KEYS = ("mark_price", "mark", "last_price", "last", "quoted_price", "price", "index_price")
-_VOL_KEYS = ("volume_24h", "volume24h", "vol_24h", "daily_volume", "volume")
-_OI_KEYS = ("open_interest", "oi", "open_interest_usd")
-_FUNDING_KEYS = ("funding_rate", "funding", "funding_rate_1h", "funding_rate_8h")
-_BID_KEYS = ("bid", "bid_price", "best_bid")
-_ASK_KEYS = ("ask", "ask_price", "best_ask")
+# Keys confirmed against a live /metadata/stats probe on 2026-06-05 (VPS).
+_LISTING_COLLECTION_KEYS = ("listings",)
+_SYMBOL_KEYS = ("ticker",)
+_PRICE_KEYS = ("mark_price",)  # no last/quoted price field on the listing
+_VOL_KEYS = ("volume_24h",)  # USDC-denominated
+# open_interest is a NESTED dict {long_open_interest, short_open_interest},
+# both USD-denominated and imbalanced (pool-backed perp); see _extract_oi.
+_OI_KEY = "open_interest"
+_FUNDING_KEY = "funding_rate"  # PERCENT units (0.1095 == 0.1095%)
+_FUNDING_INTERVAL_KEY = "funding_interval_s"
+_QUOTES_KEY = "quotes"  # quotes.base.{bid,ask} = top of book
 
 
 def _to_float(x: object) -> float | None:
@@ -81,6 +85,30 @@ def _get_first(obj: dict, keys: Iterable[str]) -> object:
     for k in keys:
         if k in obj and obj[k] not in (None, ""):
             return obj[k]
+    return None
+
+
+def _extract_oi(d: dict) -> float | None:
+    """open_interest is {long_open_interest, short_open_interest}, both USD and
+    imbalanced (pool-backed perp). Sum both sides as total open notional.
+    Verified USD on 2026-06-05: Σ(long*mark) across the universe = $4.4T
+    (absurd if base-denominated), raw Σ(long+short) = $418M (sane)."""
+    oi = d.get(_OI_KEY)
+    if not isinstance(oi, dict):
+        return _to_float(oi)
+    lo = _to_float(oi.get("long_open_interest")) or 0.0
+    so = _to_float(oi.get("short_open_interest")) or 0.0
+    total = lo + so
+    return total if total > 0 else None
+
+
+def _extract_quote(d: dict, side: str) -> float | None:
+    """Top-of-book bid/ask live under quotes.base.{bid,ask}."""
+    quotes = d.get(_QUOTES_KEY)
+    if isinstance(quotes, dict):
+        base = quotes.get("base")
+        if isinstance(base, dict):
+            return _to_float(base.get(side))
     return None
 
 
@@ -134,15 +162,22 @@ class VariationalAdapter(ExchangeAdapter):
         last_price = _to_float(_get_first(d, _PRICE_KEYS))
         if last_price is None:
             return None
+        # Funding is in PERCENT (BTC/ETH clamp at 0.1095 == 0.1095%; the decimal
+        # reading 10.95%/8h is physically impossible). The codebase stores
+        # funding_rate as a decimal fraction (cf. binance/hyperliquid), so /100.
+        funding_raw = _to_float(d.get(_FUNDING_KEY))
+        funding_rate = funding_raw / 100.0 if funding_raw is not None else None
+        interval_s = _to_float(d.get(_FUNDING_INTERVAL_KEY))
+        funding_interval_hours = int(interval_s // 3600) if interval_s else None
         return Tick(
             market_id=market_id,
             token_price=last_price,
-            bid=_to_float(_get_first(d, _BID_KEYS)),
-            ask=_to_float(_get_first(d, _ASK_KEYS)),
+            bid=_extract_quote(d, "bid"),
+            ask=_extract_quote(d, "ask"),
             vol24=_to_float(_get_first(d, _VOL_KEYS)),
-            oi=_to_float(_get_first(d, _OI_KEYS)),
-            funding_rate=_to_float(_get_first(d, _FUNDING_KEYS)),
-            funding_interval_hours=None,  # confirm cadence on live probe
+            oi=_extract_oi(d),
+            funding_rate=funding_rate,
+            funding_interval_hours=funding_interval_hours,
             timestamp=ts,
         )
 

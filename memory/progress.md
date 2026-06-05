@@ -8,9 +8,20 @@ changed but this file wasn't updated.
 
 ## In Progress
 
-- [ ] Live-probe Lighter + Variational on the VPS (`python -m app.adapters.lighter` / `.variational`) → confirm SPACEX/OPENAI/ANTHROPIC listings, capture exact symbols + anchor prices, then add calibrated markets.json rows.
+- (none)
 
-## Completed (this session)
+## Completed (2026-06-05 — Lighter/Variational live-probe + calibration)
+
+- [x] Live-probe Lighter + Variational on the VPS → 3 new markets added (markets 23 → 26), server restarted, all `connected`/`calibrated`. Results:
+  - **SPACEX:lighter** — symbol='SPACEX' (market_id=173), probe last=$2112.0, 1B-basis (price in $1500-2500 band), `share_ratio`=11.87, conf=35. Live post-restart: $2096.80 → implied_FDV $2.097T (low edge of 1B-basis SPACEX cluster $2.11-2.41T). OPENAI/ANTHROPIC **not listed** on Lighter (192-market universe).
+  - **OPENAI:variational** — ticker='OPENAI', probe mark=$1415.51, `share_ratio`=2.4, conf=35. Live: $1418.87 → $1.419T (upper published-1B cluster).
+  - **ANTHROPIC:variational** — ticker='ANTHROPIC', probe mark=$1715.35, `share_ratio`=1.79, conf=30 (FDV at HIGH edge). Live: $1738.25 → $1.738T (just past MEXC outlier $1.66T; Anthropic is thinnest/most-dispersed name).
+  - **SPACEX:variational SKIPPED** — `discover('SPACEX')` returned found=True on ticker 'SPCX' but name='SPAC and New Issue ETF' (a real ETF, not SpaceX). False-positive trap; trimmed Variational candidates to confirmed real tickers only (removed SPCX/SPX). SpaceX not listed on Variational as of 2026-06-05.
+- [x] Variational adapter keys CONFIRMED + trimmed (was defensive candidate-probing; docs were Cloudflare-blocked). Real keys from live `/metadata/stats`: collection=`listings` (465 mkts), symbol=`ticker`, price=`mark_price` (no last/quoted), vol=`volume_24h` (USDC), OI=`open_interest` **nested dict** {long_open_interest, short_open_interest} both USD (verified: Σ(long×mark)=$4.4T absurd → not base; sum both sides as total notional), funding=`funding_rate` in **PERCENT** (BTC/ETH clamp 0.1095 → /100 to match codebase decimal-fraction convention), interval=`funding_interval_s`=28800→8h, bid/ask nested under `quotes.base.{bid,ask}`. Added `_extract_oi`/`_extract_quote` helpers. **TDD note:** refactor of existing adapter (key confirmation + 2 private helpers), no new public behavior — no new test file; verified by live end-to-end `_tick_from_listing` probe instead. Lighter adapter untouched (SDK-confirmed per user).
+- [x] Registry integrity verified — `Registry(Path('data'))` loads 26 markets, FK intact, no dup market_id (`{asset_id}:{exchange}`).
+- [x] Server restart — found the live server was **orphaned pid 814** (started Jun 1) while `server.pid` pointed at dead **1721858** (stale). Plain `./stop.sh` would have skipped 814 and `./start.sh` would have failed to bind :8001. Fix: wrote 814 into `server.pid`, ran `./stop.sh` (cmdline-verified safe kill), then `HOST=0.0.0.0 PORT=8001 CORS_ALLOW_ORIGINS="http://158.247.219.35:8001,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080,null" ./start.sh` → **new pid 282581**. Verified `/health` 200, `/api/status` shows lighter+variational `connected`, WS `/ws` snapshot carries implied_FDV for all 3 (96-pt history, bid/ask/oi/funding flowing).
+
+## Completed (prior session)
 
 - [x] Add perp-DEX adapters Lighter + Variational (adapter-only, per user) — new `backend/app/adapters/lighter.py` (zkLighter `GET /api/v1/orderBookDetails`; fields confirmed against elliottech/lighter-python SDK `PerpsOrderBookDetail`: symbol/last_trade_price/daily_quote_token_volume/open_interest) and `backend/app/adapters/variational.py` (Omni `GET /metadata/stats`; defensive key-probing because docs are Cloudflare-blocked — discover() dumps real keys for the first live probe to pin down). Both wired into `app/main.py:_ADAPTER_CLASSES` ("lighter"/"variational"). NO markets.json rows added: this sandbox's network allowlist blocks ALL exchange hosts (binance/hyperliquid/lighter/variational + public proxies → "Host not in allowlist"), so live calibration (symbol + anchor price) must be done on the VPS. Verified: py_compile + ruff clean on both adapters; imports + registry routes resolve in a fresh venv; registry still loads 23 markets / 3 assets (FK intact). Each adapter has a `__main__` probe entrypoint for the VPS run.
 
