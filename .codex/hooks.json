@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/pre-tool-use.sh\"",
+            "timeout": 5,
+            "statusMessage": "Checking command safety..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/post-tool-use.sh\"",
+            "timeout": 5,
+            "statusMessage": "Checking command output..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/stop.sh\"",
+            "timeout": 300,
+            "statusMessage": "Running final verification..."
+          }
+        ]
+      }
+    ]
+  }
+}

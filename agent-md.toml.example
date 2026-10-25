@@ -1,0 +1,57 @@
+# agent-md.toml — explicit configuration for agent-md hooks.
+#
+# Copy to the repo root as `agent-md.toml` to override the heuristic
+# tool detection in .claude/hooks/* and .githooks/pre-commit. Anything
+# you leave unset falls back to the heuristic default.
+#
+# Values must be simple strings on a single line. `#` starts a comment.
+
+[verify]
+# Project-wide type-check command. Runs at Stop and at pre-commit.
+# typecheck = "npx --no-install tsc --noEmit"
+
+# Project-wide lint command. Runs at Stop and at pre-commit.
+# lint = "npx --no-install eslint ."
+
+# Per-file lint used by post-edit-verify (fast, runs after every Write/Edit).
+# The string {file} is substituted with the edited file path.
+# lint_file = "npx --no-install eslint {file}"
+
+# Test suite. Runs at Stop and at pre-commit.
+# When unset, both hooks detect the package manager via lockfile
+# (pnpm > yarn > bun > npm) and run the detected `<pm> test`. Because
+# both hooks share the same detector in .claude/hooks/_lib.sh, they
+# cannot disagree.
+# test = "pnpm test --silent"
+
+[visual]
+# When true, sensory-reminder.sh becomes a BLOCKING hook.
+#
+# It is NOT enough to drop a screenshot into artifacts_dir. The hook
+# requires STRUCTURED evidence:
+#
+#   1. A non-empty markdown file under artifacts_dir modified within
+#      freshness_seconds.
+#   2. A non-empty image (.png/.jpg/.jpeg/.webp/.gif) under artifacts_dir,
+#      also modified within freshness_seconds.
+#   3. The markdown file must reference the image by filename
+#      (literal substring match, e.g. `home-after.png`).
+#   4. The markdown must include these field labels: Changed files,
+#      Route or URL, Viewport, Artifact, Observed result.
+#
+# Recommended contents for the markdown note:
+#   - changed files (paths)
+#   - route / URL captured
+#   - viewport (e.g. 1440x900)
+#   - artifact path (the image filename)
+#   - observed result — what you verified, in prose
+#
+# A screenshot alone is not verification. The prose is the claim.
+# required = false
+
+# Where visual evidence artifacts live.
+# artifacts_dir = ".agent/visual"
+
+# Max age of an artifact (seconds) before it's considered stale.
+# Applies to both the markdown note and the image it references.
+# freshness_seconds = 3600
