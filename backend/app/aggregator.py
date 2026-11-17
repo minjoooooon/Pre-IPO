@@ -45,6 +45,19 @@ class Aggregator:
         for asset in self._registry.list_assets():
             rows = await self._store.replay_recent(asset.id, settings.history_replay_seconds)
             for row in rows:
+                market = self._registry.get_market(f"{row['asset_id']}:{row['exchange']}")
+                if market and market.rules_reviewed_at:
+                    cutoff = market.rules_reviewed_at.timestamp()
+                    if row["timestamp"] < cutoff or market.ratio_source == "uncalibrated":
+                        continue
+                    if market.valuation_basis_shares is not None:
+                        # An older process may have stored obsolete normalization
+                        # after the research timestamp. Rebuild from the raw price.
+                        row = {
+                            **row,
+                            "implied_fdv": row["token_price"] * market.valuation_basis_shares,
+                            "implied_share_price": None,
+                        }
                 quote = NormalizedQuote(
                     asset_id=row["asset_id"],
                     exchange=row["exchange"],

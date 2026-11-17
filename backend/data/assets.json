@@ -12,10 +12,10 @@
       "shares_last_updated": "2026-05-16",
       "last_round": {
         "date": "2025-12",
-        "price": 421.00,
+        "price": 421.0,
         "valuation": 800000000000
       },
-      "reference_share_price": 421.00,
+      "reference_share_price": 421.0,
       "headline": "Starship V3 cadence ramp; June 2026 IPO target $1.75T"
     },
     {
@@ -24,17 +24,23 @@
       "name": "OpenAI",
       "sector": "AI / Foundation Models",
       "fully_diluted_shares": 2400000000,
-      "shares_source": "Reported tender offer Oct 2025 at approx $500B valuation; share count estimated from per-share secondary prices. ESTIMATE - low confidence.",
+      "shares_source": "Legacy estimate retained for compatibility only; NOT a verified current fully diluted share count. Explicit venue valuation bases do not use this number.",
       "shares_source_url": "https://www.bloomberg.com/news/articles/2025-10/openai-tender-offer",
-      "shares_confidence": 45,
+      "shares_confidence": 0,
       "shares_last_updated": "2025-10-15",
       "last_round": {
         "date": "2025-10",
-        "price": 210.00,
+        "price": 210.0,
         "valuation": 500000000000
       },
-      "reference_share_price": 208.33,
-      "headline": "$500B tender Oct 2025; 3.2x oversubscribed per secondary desks"
+      "reference_share_price": null,
+      "headline": "Rules reviewed 2026-11-17; venue-implied valuation uses documented pricing bases. Latest issuer funding reference is shown; legacy share estimate is not used.",
+      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "current_funding_reference": {
+        "date": "2026-03-31",
+        "valuation": 852000000000.0,
+        "source_url": "https://openai.com/index/accelerating-the-next-phase-ai/"
+      }
     },
     {
       "id": "ANTHROPIC",
@@ -42,17 +48,23 @@
       "name": "Anthropic",
       "sector": "AI / Foundation Models",
       "fully_diluted_shares": 1790000000,
-      "shares_source": "Series F approx $183B post (early 2026); fully-diluted share count estimated from secondary-market trackers. ESTIMATE - low confidence.",
+      "shares_source": "Legacy estimate retained for compatibility only; NOT a verified current fully diluted share count. Explicit venue valuation bases do not use this number.",
       "shares_source_url": "https://www.reuters.com/anthropic-series-f",
-      "shares_confidence": 40,
+      "shares_confidence": 0,
       "shares_last_updated": "2026-02-15",
       "last_round": {
         "date": "2026-02",
-        "price": 102.00,
+        "price": 102.0,
         "valuation": 183000000000
       },
-      "reference_share_price": 102.23,
-      "headline": "Series F at $183B post; Amazon $4B follow-on commitment"
+      "reference_share_price": null,
+      "headline": "Rules reviewed 2026-11-17; venue-implied valuation uses documented pricing bases. Latest issuer funding reference is shown; legacy share estimate is not used.",
+      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "current_funding_reference": {
+        "date": "2026-05-28",
+        "valuation": 965000000000.0,
+        "source_url": "https://www.anthropic.com/news/series-h"
+      }
     }
   ]
 }

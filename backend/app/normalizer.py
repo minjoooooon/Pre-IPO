@@ -31,10 +31,12 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
     # non-finite all route to the uncalibrated branch so we never divide-by-zero
     # or emit a NaN/Inf FDV.
     bad_ratio = (
-        market.share_ratio is None
-        or market.ratio_source == "uncalibrated"
-        or market.share_ratio <= 0
-        or not math.isfinite(market.share_ratio)
+        market.ratio_source == "uncalibrated"
+        or (market.valuation_basis_shares is None and (
+            market.share_ratio is None
+            or market.share_ratio <= 0
+            or not math.isfinite(market.share_ratio)
+        ))
     )
     if bad_ratio:
         return NormalizedQuote(
@@ -53,8 +55,12 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
             timestamp=tick.timestamp,
         )
 
-    implied_share = tick.token_price / market.share_ratio
-    implied_fdv = implied_share * asset.fully_diluted_shares
+    if market.valuation_basis_shares is not None:
+        implied_share = None
+        implied_fdv = tick.token_price * market.valuation_basis_shares
+    else:
+        implied_share = tick.token_price / market.share_ratio
+        implied_fdv = implied_share * asset.fully_diluted_shares
     status: CalibrationStatus = "stale" if is_stale else "calibrated"
     return NormalizedQuote(
         asset_id=market.asset_id,

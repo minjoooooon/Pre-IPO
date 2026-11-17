@@ -274,8 +274,8 @@ function buildHedgeBook(rows, assetId) {
 // ============================================================
 function normalize(listings, fdvShares) {
   const rows = listings.map(l => {
-    const impliedShare = l.tokenPrice / l.shareRatio;
-    const impliedFDV   = impliedShare * fdvShares;
+    const impliedShare = l.valuationBasis ? null : l.tokenPrice / l.shareRatio;
+    const impliedFDV = l.valuationBasis ? l.tokenPrice * l.valuationBasis : impliedShare * fdvShares;
     return { ...l, impliedShare, impliedFDV };
   });
   // weighted consensus by confidence × sqrt(size), where size = oi when
@@ -436,7 +436,7 @@ function AssetRail({ assets, selectedId, onSelect, normMap }) {
                 <span className="mono">${fmtUSD(n.consensus)}</span>
                 <span
                   className={"mono " + (drift == null ? "muted" : drift >= 0 ? "ok" : "bad")}
-                  title={`Implied FDV ${fmtPremium(drift)} vs $${fmtUSD(a.lastRound.valuation)} round (${a.lastRound.date})`}
+                  title={`Implied valuation ${fmtPremium(drift)} vs $${fmtUSD(a.lastRound.valuation)} round (${a.lastRound.date})`}
                 >
                   vs ref {fmtPremium(drift)}
                 </span>
@@ -511,7 +511,7 @@ function AssetHeader({ asset, norm }) {
       <div className="asset-head-right">
         <div className="hero-fdv">
           <div className="hero-label">
-            CONSENSUS IMPLIED FDV
+            CONSENSUS IMPLIED VALUATION
             <AlertButton assetId={asset.id} />
           </div>
           <div className="hero-value mono">
@@ -553,7 +553,7 @@ function KPIStrip({ asset, norm }) {
   const spread = hasRows && isFinite(norm.spread) ? norm.spread : null;
   const items = [
     {
-      label: "Consensus FDV",
+      label: "Consensus valuation",
       sub: "vol·conf weighted",
       value: "$" + fmtUSD(norm.consensus),
       foot: (
@@ -580,7 +580,7 @@ function KPIStrip({ asset, norm }) {
     },
     {
       label: "Spread (hi–lo)",
-      sub: "normalized FDV",
+      sub: "normalized valuation",
       value: spread != null ? spread.toFixed(2) + "%" : "—",
       foot: hasRows
         ? <span className="muted">{fmtUSD(maxImplied - minImplied)} gap</span>
@@ -593,9 +593,9 @@ function KPIStrip({ asset, norm }) {
       foot: <ConfBar value={norm.avgConf || 0} />
     },
     {
-      label: "FDV shares",
-      sub: "editable",
-      value: (asset.fdvShares/1e9).toFixed(2) + "B",
+      label: asset.rulesReviewedAt ? "Company shares" : "FDV shares",
+      sub: asset.rulesReviewedAt ? "not verified" : "editable",
+      value: asset.rulesReviewedAt ? "Unknown" : (asset.fdvShares/1e9).toFixed(2) + "B",
       foot: <span className="muted">last round ${fmtUSD(asset.lastRound.valuation)}</span>
     }
   ];
@@ -624,7 +624,7 @@ function ConfBar({ value }) {
 }
 
 // ============================================================
-// multi-line chart of implied FDV per exchange
+// multi-line chart of implied valuation per exchange
 // ============================================================
 function ValuationChart({ asset, listings, series, norm }) {
   const W = 880, H = 320, PAD = { l: 56, r: 12, t: 16, b: 26 };
@@ -642,7 +642,7 @@ function ValuationChart({ asset, listings, series, norm }) {
     // with a placeholder until warm-up history arrives.
     return (
       <div className="panel chart-panel">
-        <PanelHead title="IMPLIED FDV — 24H INTRADAY" sub="Normalized to USD; each line = 1 venue's instrument"/>
+        <PanelHead title="IMPLIED VALUATION — 24H INTRADAY" sub="Normalized to USD; each line = 1 venue's instrument"/>
         <div className="chart-wrap" style={{padding:"32px",color:"var(--tx-2)"}}>
           Waiting for tick history…
         </div>
@@ -683,7 +683,7 @@ function ValuationChart({ asset, listings, series, norm }) {
 
   return (
     <div className="panel chart-panel">
-      <PanelHead title="IMPLIED FDV — 24H INTRADAY" sub="Normalized to USD; each line = 1 venue's instrument" right={
+      <PanelHead title="IMPLIED VALUATION — 24H INTRADAY" sub="Normalized to USD; each line = 1 venue's instrument" right={
         <div className="panel-tabs">
           <span className="tab active">1D</span>
           <span className="tab">7D</span>
@@ -785,7 +785,7 @@ function PremiumBars({ norm }) {
   if (rows.length === 0) {
     return (
       <div className="panel">
-        <PanelHead title="PREMIUM / DISCOUNT" sub="vs consensus implied FDV"/>
+        <PanelHead title="PREMIUM / DISCOUNT" sub="vs consensus implied valuation"/>
         <div className="bars" style={{padding:"24px",color:"var(--tx-2)"}}>
           No calibrated venues to compare yet.
         </div>
@@ -795,7 +795,7 @@ function PremiumBars({ norm }) {
   const max = Math.max(...rows.map(r=>Math.abs(r.prem))) * 1.2 || 1;
   return (
     <div className="panel">
-      <PanelHead title="PREMIUM / DISCOUNT" sub="vs consensus implied FDV"/>
+      <PanelHead title="PREMIUM / DISCOUNT" sub="vs consensus implied valuation"/>
       <div className="bars">
         {rows.map(r => {
           const pct = (r.prem/max) * 50;
@@ -1005,7 +1005,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
     <div className="panel">
       <PanelHead
         title="NORMALIZATION MATRIX"
-        sub={<>Implied share price = <span className="mono">token / ratio</span> · Implied FDV = <span className="mono">implied share × FDV shares</span></>}
+        sub={<>Venue valuation = price x documented pricing basis. Share conversion shown only when verified.</>}
         right={
           <div className="ntable-head-right">
             <StructFilter
@@ -1013,7 +1013,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
               onChange={onStructFilterChange || (() => {})}
               counts={counts}
             />
-            <div className="fdv-editor">
+            <div className="fdv-editor" style={asset.rulesReviewedAt ? {display:"none"} : undefined}>
             <span className="muted">FDV SHARES</span>
             <input
               className="fdv-input mono"
@@ -1049,16 +1049,16 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
               <th className="l">VENUE</th>
               <th className="l">STRUCTURE</th>
               <th className="r">TOKEN PX</th>
-              <th className="r">SHARE RATIO</th>
+              <th className="r">PRICING BASIS</th>
               <th className="l">RATIO SOURCE</th>
               <th className="r">IMPLIED $/SH</th>
-              <th className="r">IMPLIED FDV</th>
+              <th className="r">IMPLIED VALUATION</th>
               <th className="r">vs REF</th>
               <th
                 className="r"
                 title={structFilter === "all"
-                  ? "Premium vs full-set consensus FDV (weighted by conf × sqrt(size))"
-                  : `Premium vs ${structFilter.toUpperCase()}-only consensus FDV (filter-scoped)`}
+                  ? "Premium vs full-set consensus valuation (weighted by conf × sqrt(size))"
+                  : `Premium vs ${structFilter.toUpperCase()}-only consensus valuation (filter-scoped)`}
               >
                 vs CONS.{structFilter !== "all" ? <span className="muted"> ({structFilter})</span> : null}
               </th>
@@ -1084,6 +1084,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                       <TickAge tickAt={r.tickAt}/>
                     </div>
                     <RiskChips row={r} />
+                    {r.rulesReviewedAt && <div className="muted" title={r.notes}>Reviewed {r.rulesReviewedAt.slice(0,10)}</div>}
                   </td>
                   <td className="l">
                     <span className={"struct-pill tone-"+getStructMeta(r.structure).tone}>{getStructMeta(r.structure).sym}</span>
@@ -1093,11 +1094,11 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                   <td className="r mono">
                     <span
                       className="ratio-cell ratio-edit"
-                      title="Click to edit share_ratio (or backsolve with 'fdv:<billions>')"
-                      onClick={() => calibrateRatio(r)}
+                      title={r.valuationBasis ? "Documented venue pricing denominator; not actual diluted shares" : "Click to edit share_ratio"}
+                      onClick={() => { if (!r.valuationBasis) calibrateRatio(r); }}
                       style={{cursor:"pointer", textDecoration:"underline dotted"}}
                     >
-                      1 : {fmtNum(r.shareRatio, 4)}
+                      {r.valuationBasis ? `x ${(r.valuationBasis/1e9).toFixed(6)}B` : `1 : ${fmtNum(r.shareRatio, 4)}`}
                     </span>
                   </td>
                   <td className="l">
@@ -1116,18 +1117,18 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                           (r.ratioCalibratedAt
                             ? `calibrated: ${r.ratioCalibratedAt}\n`
                             : "") +
-                          `exchange docs: ${r.docUrl}`
+                          `reviewed: ${r.rulesReviewedAt || "unknown"}\n${r.notes || ""}\nexchange docs: ${r.docUrl}`
                         }
                       >
                         ↗
                       </a>
                     )}
                   </td>
-                  <td className="r mono accent">{fmtNum(r.impliedShare)}</td>
+                  <td className="r mono accent">{r.impliedShare == null ? "-" : fmtNum(r.impliedShare)}</td>
                   <td className="r mono accent strong">${fmtUSD(r.impliedFDV)}</td>
                   <td
                     className={"r mono strong " + (premRef == null ? "muted" : premRef >= 0 ? "ok" : "bad")}
-                    title={`Implied FDV vs $${fmtUSD(asset.lastRound.valuation)} (${asset.lastRound.date} round)`}
+                    title={`Implied valuation vs $${fmtUSD(asset.lastRound.valuation)} (${asset.lastRound.date} round)`}
                   >
                     {fmtPremium(premRef)}
                   </td>
@@ -1183,7 +1184,7 @@ function NormTable({ asset, norm, onFdvShares, structFilter = "all", onStructFil
                 <td className="l" colSpan={1}>
                   <span
                     className="dis-badge mono"
-                    title={d.reason || "disabled"}
+                    title={`${d.rulesReviewedAt || ""} ${d.reason || "disabled"}`}
                   >
                     DISABLED
                     {d.docUrl && (
@@ -1264,7 +1265,7 @@ function StructureBreakdown({ norm }) {
             <div className="struct-row-cells">
               <div className="cell"><div className="cell-l">OI SHARE</div><div className="cell-v mono">{g.oiShare.toFixed(1)}%</div></div>
               <div className="cell"><div className="cell-l">24H VOL</div><div className="cell-v mono">${fmtUSD(g.vol)}</div></div>
-              <div className="cell"><div className="cell-l">AVG IMP. FDV</div><div className="cell-v mono">${fmtUSD(g.avgFDV)}</div></div>
+              <div className="cell"><div className="cell-l">AVG VALUATION</div><div className="cell-v mono">${fmtUSD(g.avgFDV)}</div></div>
               <div className="cell"><div className="cell-l">AVG CONF</div><div className="cell-v mono">{g.avgConf.toFixed(0)}</div></div>
             </div>
           </div>
@@ -1503,16 +1504,28 @@ function DerivationPanel({ asset, norm }) {
   if (!anchor) {
     return (
       <div className="panel deriv-panel">
-        <PanelHead title="DERIVATION" sub="how implied FDV is built"/>
+        <PanelHead title="DERIVATION" sub="how implied valuation is built"/>
         <div className="deriv-body" style={{padding:"24px",color:"var(--tx-2)"}}>
           Waiting for a live calibrated venue to anchor the derivation chain…
         </div>
       </div>
     );
   }
+  if (anchor.valuationBasis) return (
+    <div className="panel deriv-panel">
+      <PanelHead title="VENUE VALUATION BASIS" sub="A pricing convention, not verified fully diluted shares"/>
+      <div className="deriv-body" style={{padding:20}}>
+        <p className="mono">{anchor.ex}: ${fmtNum(anchor.tokenPrice)} x {(anchor.valuationBasis/1e9).toFixed(6)}B</p>
+        <p className="accent strong">${fmtUSD(anchor.impliedFDV)}</p>
+        <p className="muted">{anchor.notes}</p>
+        <p>Reviewed {anchor.rulesReviewedAt} / <a href={anchor.docUrl} target="_blank" rel="noopener noreferrer">Official rule</a></p>
+        {asset.currentFundingReference && <p>Funding reference ({asset.currentFundingReference.date}): ${fmtUSD(asset.currentFundingReference.valuation)} / <a href={asset.currentFundingReference.source_url} target="_blank" rel="noopener noreferrer">Issuer source</a></p>}
+      </div>
+    </div>
+  );
   return (
     <div className="panel deriv-panel">
-      <PanelHead title="DERIVATION" sub="how implied FDV is built"/>
+      <PanelHead title="DERIVATION" sub="how implied valuation is built"/>
       <div className="deriv-body">
         <div className="deriv-step">
           <div className="deriv-step-num">01</div>
@@ -1559,7 +1572,7 @@ function DerivationPanel({ asset, norm }) {
         <div className="deriv-step final">
           <div className="deriv-step-num">05</div>
           <div className="deriv-step-body">
-            <div className="deriv-step-h">IMPLIED FDV</div>
+            <div className="deriv-step-h">IMPLIED VALUATION</div>
             <div className="deriv-formula mono big">
               <span className="accent strong">${fmtUSD(anchor.impliedShare * asset.fdvShares)}</span>
             </div>
@@ -1582,7 +1595,7 @@ function DerivationPanel({ asset, norm }) {
 // vs spot gap is usually a structure mismatch, not arb).
 // ============================================================
 function TopGap({ rows }) {
-  // Need at least two rows with finite implied FDV to compute a gap. The
+  // Need at least two rows with finite implied valuation to compute a gap. The
   // VenueCards caller already sorts by impliedFDV desc; pick richest/cheapest
   // by re-scanning (cheaper than assuming order so this component is robust
   // if called from elsewhere later).
@@ -1621,7 +1634,7 @@ function TopGap({ rows }) {
 }
 
 // ============================================================
-// VenueCards — at-a-glance grid comparing implied FDV / premium /
+// VenueCards — at-a-glance grid comparing implied valuation / premium /
 // funding / vol across exchanges for the selected asset.
 //
 // Cross-venue comparison only makes sense within the same product class:
@@ -1708,6 +1721,7 @@ function DisabledVenueCard({ d }) {
         </div>
         <span className={"struct-pill tone-" + meta.tone}>{meta.sym}</span>
       </div>
+      <div className="muted" style={{fontSize:11,lineHeight:1.5}}>{d.reason}</div>
       <div className="vc-main mono muted">—</div>
       <div className="vc-stat">
         <span className="vc-stat-v mono muted">disabled</span>
@@ -1785,7 +1799,7 @@ function VenueCards({ asset, norm, structFilter = "all", onStructFilterChange })
     <div className="panel venue-cards-panel">
       <PanelHead
         title="VENUES · LIVE COMPARISON"
-        sub={<>Implied FDV per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · split by product class (spot vs perp)</>}
+        sub={<>Implied valuation per exchange · premium vs <span className="mono">${fmtUSD(refFdv)}</span> last round · split by product class (spot vs perp)</>}
         right={
           <div className="vc-head-right">
             <StructFilter

@@ -53,6 +53,9 @@ class Market(BaseModel):
     confidence: int = Field(ge=0, le=100)
     doc_url: str | None = None
     notes: str | None = None
+    # Explicit pricing denominator (or valuation-unit scale), NOT diluted shares.
+    valuation_basis_shares: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    rules_reviewed_at: datetime | None = None
 
     @property
     def market_id(self) -> str:

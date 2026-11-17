@@ -77,6 +77,8 @@
     // Disabled / uncalibrated / zero-or-negative ratios are routed to
     // DISABLED instead (or simply dropped from LISTINGS on a config update).
     if (!m) return false;
+    if (m.ratio_source === "uncalibrated") return false;
+    if (Number.isFinite(m.valuation_basis_shares) && m.valuation_basis_shares > 0) return true;
     if (m.share_ratio == null) return false;
     if (typeof m.share_ratio !== "number" || !(m.share_ratio > 0)) return false;
     if (m.ratio_source === "uncalibrated") return false;
@@ -99,6 +101,9 @@
       ratioSource: ratioSourceFromMarket(market),
       tokenPrice: quote.token_price,
       shareRatio: market.share_ratio,
+      valuationBasis: market.valuation_basis_shares,
+      notes: market.notes,
+      rulesReviewedAt: market.rules_reviewed_at,
       confidence: quote.confidence,
       vol24: quote.vol24 || 0,
       oi: quote.oi || 0,
@@ -149,11 +154,13 @@
       name: asset.name,
       sector: asset.sector,
       lastRound: {
-        date: asset.last_round.date,
-        price: asset.last_round.price,
-        valuation: asset.last_round.valuation,
+        date: (asset.current_funding_reference || asset.last_round).date,
+        price: asset.current_funding_reference ? null : asset.last_round.price,
+        valuation: (asset.current_funding_reference || asset.last_round).valuation,
       },
       fdvShares: asset.fully_diluted_shares,
+      rulesReviewedAt: asset.rules_reviewed_at,
+      currentFundingReference: asset.current_funding_reference,
       consensusFDV: consensusFDV,
       delta24h: delta24h,
       headline: asset.headline,
@@ -200,8 +207,7 @@
       const mid = `${m.asset_id}:${m.exchange}`;
       const st = statusByMarketId[mid];
       const isDisabled =
-        m.share_ratio == null ||
-        m.ratio_source === "uncalibrated" ||
+        !isLiveMarket(m) ||
         (st && (st.state === "disabled" || st.state === "disconnected"));
       if (!isDisabled) return;
       if (!next[m.asset_id]) next[m.asset_id] = [];
@@ -210,7 +216,8 @@
         venue: m.venue,
         structure: m.structure,
         symbol: m.symbol,
-        reason: (st && st.last_error) || "uncalibrated",
+        reason: m.notes || (st && st.last_error) || "uncalibrated",
+        rulesReviewedAt: m.rules_reviewed_at,
         docUrl: m.doc_url || null,
         ratioSource: m.ratio_source,
       });
@@ -245,7 +252,17 @@
       const exMap = history[asset_id];
       window.SERIES[asset_id] = {};
       Object.keys(exMap).forEach((exchange) => {
-        const pts = exMap[exchange];
+        const m = marketsById[`${asset_id}:${exchange}`];
+        if (!isLiveMarket(m)) { exMap[exchange] = []; return; }
+        const cutoff = m.rules_reviewed_at ? Date.parse(m.rules_reviewed_at) / 1000 : 0;
+        const pts = exMap[exchange]
+          .filter(q => !cutoff || q.timestamp >= cutoff)
+          .map(q => cutoff && m.valuation_basis_shares ? {
+            ...q,
+            implied_fdv: q.token_price * m.valuation_basis_shares,
+            implied_share_price: null,
+          } : q);
+        exMap[exchange] = pts;
         const series = pts
           .map((q) => q.implied_fdv)
           .filter((v) => v != null);
@@ -329,7 +346,7 @@
         const size = (r.oi && r.oi > 0) ? r.oi : (r.vol24 || 0);
         const w = (r.confidence / 100) * Math.sqrt(Math.max(size, 1));
         const impl = r.tokenPrice / r.shareRatio;
-        const fdv = impl * asset.fdvShares;
+        const fdv = r.valuationBasis ? r.tokenPrice * r.valuationBasis : impl * asset.fdvShares;
         wsum += w;
         vsum += w * fdv;
       });
@@ -366,12 +383,14 @@
       const existing = (window.ASSETS || []).find((x) => x.id === a.id);
       if (existing) {
         existing.fdvShares = a.fully_diluted_shares;
+        existing.rulesReviewedAt = a.rules_reviewed_at;
+        existing.currentFundingReference = a.current_funding_reference;
         existing.headline = a.headline;
         existing.sector = a.sector;
         existing.lastRound = {
-          date: a.last_round.date,
-          price: a.last_round.price,
-          valuation: a.last_round.valuation,
+          date: (a.current_funding_reference || a.last_round).date,
+          price: a.current_funding_reference ? null : a.last_round.price,
+          valuation: (a.current_funding_reference || a.last_round).valuation,
         };
         existing.sharesSource = a.shares_source;
         existing.sharesSourceUrl = a.shares_source_url;
@@ -397,6 +416,9 @@
           structure: structureFromMarket(mkt),
           ratioSource: ratioSourceFromMarket(mkt),
           shareRatio: mkt.share_ratio,
+          valuationBasis: mkt.valuation_basis_shares,
+          notes: mkt.notes,
+          rulesReviewedAt: mkt.rules_reviewed_at,
           confidence: mkt.confidence,
         };
       }
@@ -502,13 +524,13 @@
     if (rules.length === 0) return;
     const asset = assetsById[asset_id];
     if (!asset) return;
-    const refFdv = asset.last_round && asset.last_round.valuation;
+    const refFdv = (asset.current_funding_reference || asset.last_round || {}).valuation;
     if (!refFdv) return;
     const impliedFdv = quote.implied_fdv;
     if (impliedFdv == null) return;
     const premPct = ((impliedFdv - refFdv) / refFdv) * 100;
-    const prevPremPct = prevRow && prevRow.tokenPrice && prevRow.shareRatio
-      ? (((prevRow.tokenPrice / prevRow.shareRatio) * asset.fully_diluted_shares - refFdv) / refFdv) * 100
+    const prevPremPct = prevRow && prevRow.tokenPrice && (prevRow.valuationBasis || prevRow.shareRatio)
+      ? (((prevRow.valuationBasis ? prevRow.tokenPrice * prevRow.valuationBasis : (prevRow.tokenPrice / prevRow.shareRatio) * asset.fully_diluted_shares) - refFdv) / refFdv) * 100
       : null;
 
     rules.forEach((rule) => {
