@@ -1715,6 +1715,7 @@ function DisabledVenueCard({ d }) {
     <div className="venue-card" title={d.reason}>
       <div className="vc-head"><span className="vc-name">{d.ex}</span><span className="mono">PRICE ONLY</span></div>
       <div className="vc-main mono">${d.rawQuote.tokenPrice.toLocaleString(undefined, {maximumFractionDigits: 6})}</div>
+      <TickAge tickAt={d.rawQuote.tickAt}/>
       <div className="muted">Valuation unavailable - excluded from comparisons</div>
       <div className="mono">{d.symbol}</div>
       <div className="muted" style={{fontSize:11,lineHeight:1.5}}>{d.reason}</div>

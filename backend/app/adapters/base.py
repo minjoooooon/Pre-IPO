@@ -72,6 +72,7 @@ class PublicRestAdapter(ExchangeAdapter):
 
     async def stream(self, market: Market) -> AsyncIterator[Tick]:
         import asyncio
+
         import httpx
         async with httpx.AsyncClient(timeout=10) as client:
             while True:

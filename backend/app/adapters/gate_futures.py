@@ -1,8 +1,10 @@
 """Gate USDT futures; distinct from Gate spot certificate adapter."""
 import asyncio
 import time
-from .base import PublicRestAdapter, finite_number as num
+
 from ..models import Tick
+from .base import PublicRestAdapter
+from .base import finite_number as num
 
 
 class GateFuturesAdapter(PublicRestAdapter):

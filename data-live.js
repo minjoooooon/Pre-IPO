@@ -81,6 +81,12 @@
 
   function expireMarkets() {
     const affected = new Set();
+    Object.entries(rawQuotes).forEach(([mid, row]) => {
+      if (Date.now() - row.tickAt >= 60000) {
+        delete rawQuotes[mid];
+        affected.add(mid.split(":")[0]);
+      }
+    });
     Object.values(marketsById).forEach(m => {
       if (!isExpired(m)) return;
       affected.add(m.asset_id);
@@ -101,6 +107,7 @@
     expiryTimer = null;
     const next = Object.values(marketsById)
       .map(m => Date.parse(m.valuation_valid_until))
+      .concat(Object.values(rawQuotes).map(row => row.tickAt + 60000))
       .filter(t => Number.isFinite(t) && t > Date.now())
       .sort((a, b) => a - b)[0];
     if (next != null) expiryTimer = setTimeout(() => {
@@ -265,7 +272,8 @@
       if (!isDisabled) return;
       if (!next[m.asset_id]) next[m.asset_id] = [];
       next[m.asset_id].push({
-        rawQuote: m.quote_only && !isExpired(m) ? rawQuotes[mid] : null,
+        rawQuote: m.quote_only && !isExpired(m) && (!st || st.state === "connected")
+          && rawQuotes[mid] && Date.now() - rawQuotes[mid].tickAt < 60000 ? rawQuotes[mid] : null,
         quoteOnly: !!m.quote_only,
         ex: m.exchange,
         venue: m.venue,
@@ -311,8 +319,12 @@
         const m = marketsById[`${asset_id}:${exchange}`];
         if (m && m.quote_only && !isExpired(m)) {
           const valid = exMap[exchange].filter(q => Number.isFinite(q.token_price) && q.token_price > 0 && !isExpired(m, q.timestamp)
+            && Number.isFinite(q.timestamp) && Date.now() - q.timestamp * 1000 >= -30000 && Date.now() - q.timestamp * 1000 < 60000
             && (!m.rules_reviewed_at || q.timestamp >= Date.parse(m.rules_reviewed_at) / 1000));
-          if (valid.length) rawQuotes[`${asset_id}:${exchange}`] = makeListingRow(valid[valid.length - 1], m);
+          if (valid.length) {
+            const last = valid[valid.length - 1];
+            rawQuotes[`${asset_id}:${exchange}`] = { ...makeListingRow(last, m), tickAt: last.timestamp * 1000 };
+          }
         }
         if (!isLiveMarket(m)) { exMap[exchange] = []; return; }
         const cutoff = m.rules_reviewed_at ? Date.parse(m.rules_reviewed_at) / 1000 : 0;
@@ -380,10 +392,14 @@
     const market = marketsById[`${asset_id}:${exchange}`];
     if (!market) return;
     if (isExpired(market, quote.timestamp)) return;
+    if (market.rules_reviewed_at && (!Number.isFinite(quote.timestamp)
+      || quote.timestamp < Date.parse(market.rules_reviewed_at) / 1000)) return;
     if (market.quote_only) {
-      if (!(quote.token_price > 0)) return;
-      rawQuotes[`${asset_id}:${exchange}`] = makeListingRow(quote, market);
+      if (!(quote.token_price > 0) || !Number.isFinite(quote.timestamp)
+        || Date.now() - quote.timestamp * 1000 < -30000 || Date.now() - quote.timestamp * 1000 >= 60000) return;
+      rawQuotes[`${asset_id}:${exchange}`] = { ...makeListingRow(quote, market), tickAt: quote.timestamp * 1000 };
       rebuildDisabled(window.PRE_IPO_LIVE.statuses);
+      armExpiryTimer();
       scheduleDispatch();
       return;
     }
@@ -674,6 +690,9 @@
     };
     ws.onclose = () => {
       window.PRE_IPO_LIVE.connected = false;
+      Object.keys(rawQuotes).forEach(k => delete rawQuotes[k]);
+      rebuildDisabled(window.PRE_IPO_LIVE.statuses);
+      armExpiryTimer();
       console.warn("[live] ws closed; will reconnect");
       // Detach handlers from the closing instance so any in-flight frame
       // delivered between onclose and GC doesn't fire stale-closure logic,

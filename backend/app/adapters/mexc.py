@@ -126,6 +126,22 @@ class MEXCAdapter(ExchangeAdapter):
         return DiscoverResult(found=False, error="no candidate returned a ticker")
 
     async def _fetch_ticker(self, client: httpx.AsyncClient, symbol: str) -> dict | None:
+        if symbol == "OPENAI_USDT":
+            # This newly enabled quote-only feed needs current session state;
+            # contract-size caching alone cannot establish tradability.
+            response = await client.get(f"{REST_BASE}/api/v1/contract/detail", params={"symbol": symbol})
+            response.raise_for_status()
+            metadata = response.json()
+            if not isinstance(metadata, dict) or not metadata.get("success"):
+                return None
+            contracts = metadata.get("data")
+            if isinstance(contracts, dict):
+                contracts = [contracts]
+            if not isinstance(contracts, list):
+                return None
+            contract = next((c for c in contracts if c.get("symbol") == symbol), None)
+            if not contract or contract.get("state") != 0:
+                return None
         r = await client.get(
             f"{REST_BASE}/api/v1/contract/ticker",
             params={"symbol": symbol},
@@ -135,6 +151,15 @@ class MEXCAdapter(ExchangeAdapter):
         if not isinstance(body, dict) or not body.get("success"):
             return None
         data = body.get("data")
+        if symbol == "OPENAI_USDT":
+            if not isinstance(data, dict) or data.get("symbol") != symbol:
+                return None
+            source_ms = _to_float(data.get("timestamp"))
+            price = _to_float(data.get("lastPrice"))
+            if source_ms is None or not -30 <= time.time() - source_ms / 1000 < 60:
+                return None
+            if price is None or price <= 0:
+                return None
         return data if isinstance(data, dict) else None
 
     async def _fetch_contract_size(self, client: httpx.AsyncClient, symbol: str) -> float | None:
@@ -207,6 +232,8 @@ class MEXCAdapter(ExchangeAdapter):
                     funding_rate = _to_float(ticker.get("fundingRate"))
 
                     ts = time.time()
+                    if symbol == "OPENAI_USDT":
+                        ts = float(ticker["timestamp"]) / 1000
 
                     self._last_tick_at = time.time()
                     backoff = settings.reconnect_initial_seconds

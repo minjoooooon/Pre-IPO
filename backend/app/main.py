@@ -12,16 +12,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from .adapters.bybit import BybitAdapter
-from .adapters.gate_futures import GateFuturesAdapter
 from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
 from .adapters.bitget_futures import BitgetFuturesAdapter
-from .adapters.bitmart import BitMartAdapter
-from .adapters.mexc import MEXCAdapter
+from .adapters.bybit import BybitAdapter
+from .adapters.bydfi import BYDFiAdapter
 from .adapters.gate import GateAdapter
+from .adapters.gate_futures import GateFuturesAdapter
 from .adapters.hyperliquid import HyperliquidAdapter
+from .adapters.mexc import MEXCAdapter
 from .adapters.okx import OkxAdapter
 from .aggregator import Aggregator
 from .api import admin as admin_api
@@ -95,6 +95,7 @@ def _persist_admin_token(token: str) -> Path:
 # Wiring registry: which adapter handles which exchange_id
 _ADAPTER_CLASSES = {
     "bybit": BybitAdapter,
+    "bydfi": BYDFiAdapter,
     "gate-futures": GateFuturesAdapter,
     "gate-futures-legacy": GateFuturesAdapter,
     # Hyperliquid HIP-3 builder DEXes are distinct routes (different `dex`
@@ -124,11 +125,6 @@ _ADAPTER_CLASSES = {
     # markets (same trick as bingx/bingx-prestocks above).
     "mexc": MEXCAdapter,
     "mexc-stock": MEXCAdapter,
-    # BitMart Contract pre-IPO perps (tradfi_info populated). Single
-    # endpoint /contract/public/details returns price + USDT vol + USDT
-    # OI + funding + funding_interval_hours; funding cycle is 1h on
-    # BitMart pre-IPO contracts (not the 8h default).
-    "bitmart": BitMartAdapter,
     # Bitget USDT-M Futures pre-IPO RWA perp (isRwa=YES, different
     # endpoint tree from Bitget spot — /api/v2/mix/market/* vs /api/v2/
     # spot/market/*). Currently SPCXUSDT only; OPENAI/ANTHROPIC not yet

@@ -1,8 +1,10 @@
 """Bybit V5 public linear pre-market contracts (continuous trading only)."""
 import asyncio
 import time
-from .base import PublicRestAdapter, finite_number as num
+
 from ..models import Tick
+from .base import PublicRestAdapter
+from .base import finite_number as num
 
 
 class BybitAdapter(PublicRestAdapter):

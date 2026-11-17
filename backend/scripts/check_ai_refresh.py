@@ -19,7 +19,7 @@ for key in ("OPENAI:binance", "OPENAI:bitget-futures", "OPENAI:hl-vntl", "ANTHRO
     m = markets[key]
     q = normalize(tick, m, assets[m.asset_id], now=100)
     assert q.implied_fdv == 125_000_000_000, (key, q)
-for key in ("ANTHROPIC:binance", "ANTHROPIC:bitget-futures", "ANTHROPIC:mexc"):
+for key in ("ANTHROPIC:mexc", "ANTHROPIC:bingx"):
     m = markets[key]
     deadline = m.valuation_valid_until.timestamp()
     live_tick = tick.model_copy(update={"timestamp": deadline - 1})
@@ -27,7 +27,11 @@ for key in ("ANTHROPIC:binance", "ANTHROPIC:bitget-futures", "ANTHROPIC:mexc"):
     assert normalize(live_tick, m, assets[m.asset_id], now=deadline).implied_fdv is None
     future_tick = tick.model_copy(update={"timestamp": deadline})
     assert normalize(future_tick, m, assets[m.asset_id], now=deadline - 1).implied_fdv is None
-for key in ("ANTHROPIC:bybit", "ANTHROPIC:kucoin", "ANTHROPIC:bydfi"):
+for key in ("ANTHROPIC:binance", "ANTHROPIC:bitget-futures"):
+    m = markets[key]
+    assert m.symbol == "ANTUSDT" and m.valuation_valid_until is None
+    assert normalize(tick, m, assets[m.asset_id], now=100).implied_fdv == 125 * 13_116_075_288
+for key in ("ANTHROPIC:bybit", "ANTHROPIC:bydfi", "OPENAI:bydfi"):
     m = markets[key]
     q = normalize(tick, m, assets[m.asset_id], now=100)
     assert q.implied_fdv is None and q.calibration_status == "uncalibrated", key
@@ -63,14 +67,14 @@ async def check_history():
         points = agg.snapshot_message()["history"]["OPENAI"]["okx"]
         assert len(points) == 1 and points[0]["implied_fdv"] == 1250e9
         assert points[0]["implied_share_price"] is None
-        m = markets["ANTHROPIC:binance"]
+        m = markets["ANTHROPIC:mexc"]
         end = m.valuation_valid_until.timestamp()
         live = normalize(tick.model_copy(update={"timestamp": end - 1}), m, assets["ANTHROPIC"], now=end - 1)
         agg._ring_push(live)
         with patch("app.aggregator.time.time", return_value=end - 1):
-            assert agg.snapshot_message()["history"]["ANTHROPIC"]["binance"]
+            assert agg.snapshot_message()["history"]["ANTHROPIC"]["mexc"]
         with patch("app.aggregator.time.time", return_value=end):
-            assert "binance" not in agg.snapshot_message()["history"]["ANTHROPIC"]
+            assert "mexc" not in agg.snapshot_message()["history"]["ANTHROPIC"]
     finally:
         await agg.stop()
 

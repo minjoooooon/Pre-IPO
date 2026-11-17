@@ -19,7 +19,7 @@ assert.equal(window.ASSETS.find(a => a.id === 'OPENAI').lastRound.valuation, 852
 assert.equal(window.ASSETS.find(a => a.id === 'OPENAI').lastRound.price, null);
 assert.equal(window.LISTINGS.OPENAI[0].valuationBasis, 10e9);
 const initialListings = [...window.LISTINGS.OPENAI];
-assert(window.DISABLED.ANTHROPIC.some(m => m.ex === 'bybit' && m.reason.includes('Nov16')));
+assert(window.DISABLED.ANTHROPIC.some(m => m.ex === 'bybit' && m.quoteOnly));
 const events = [];
 global.CustomEvent = class { constructor(type, options) { this.type = type; this.detail = options?.detail; } };
 window.dispatchEvent = e => events.push(e);
@@ -54,7 +54,11 @@ for (const exchange of ['binance', 'mexc', 'bitget-futures']) {
   anthHistory[exchange] = [{ ...point, asset_id: 'ANTHROPIC', exchange, timestamp: clock / 1000,
     token_price: 1300, implied_fdv: 1300e9, funding_rate: 0.00005 }];
 }
-feed.handleSnapshot({ assets, markets, history: { ANTHROPIC: anthHistory } });
+// Characterize the prior lifecycle independently of today's successor metadata.
+const legacyMarkets = markets.map(m => m.asset_id === 'ANTHROPIC' && ['binance', 'mexc', 'bitget-futures'].includes(m.exchange)
+  ? { ...m, valuation_basis_shares: 1e9, rules_reviewed_at: '2026-11-17T02:00:00Z',
+      valuation_valid_until: `2026-11-17T${m.exchange === 'bitget-futures' ? '09' : '08'}:30:00Z` } : m);
+feed.handleSnapshot({ assets, markets: legacyMarkets, history: { ANTHROPIC: anthHistory } });
 assert.equal(window.LISTINGS.ANTHROPIC.length, 3);
 feed.handleTick({ ...anthHistory.binance[0], timestamp: Date.parse('2026-11-17T08:30:00Z') / 1000, token_price: 9999 });
 assert.equal(window.LISTINGS.ANTHROPIC.find(m => m.ex === 'binance').tokenPrice, 1300);
@@ -74,3 +78,53 @@ feed.handleTick(anthHistory.binance[0]);
 assert.equal(window.LISTINGS.ANTHROPIC.length, 0, 'Queued ticks cannot revive expired contracts');
 Date.now = realNow;
 console.log('PASS: three current Anthropic cards, exact cutoff, stalled-feed purge and no queued-tick revival');
+
+// Quote-only prices must be visible but never affect valuations, charts or alerts.
+clock = Date.parse('2026-11-17T11:00:00Z');
+Date.now = () => clock;
+const raw = { ...point, exchange: 'bydfi', timestamp: clock / 1000, token_price: 1200,
+  implied_fdv: 999e12, calibration_status: 'uncalibrated' };
+feed.handleSnapshot({ assets, markets, history: {} });
+const priorAlerts = events.filter(e => e.type === 'pre-ipo:alert').length;
+feed.handleTick(raw);
+assert.equal(window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote.tokenPrice, 1200);
+assert(!(window.LISTINGS.OPENAI || []).some(m => m.ex === 'bydfi'));
+assert(!window.SERIES.OPENAI?.bydfi && !window.FUNDING.OPENAI?.bydfi);
+assert.equal(window.ASSETS.find(a => a.id === 'OPENAI').consensusFDV, 0);
+assert.equal(events.filter(e => e.type === 'pre-ipo:alert').length, priorAlerts);
+const rawDeadline = timers.at(-1);
+clock += 60000;
+rawDeadline.callback();
+assert(!window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote, 'Stalled quote-only feed expires without a server event');
+clock -= 60000;
+feed.handleTick(raw);
+feed.handleStatus({ statuses: [{ market_id: 'OPENAI:bydfi', state: 'disconnected' }] });
+assert(!window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote, 'Disconnected quote-only feed must not look live');
+feed.handleSnapshot({ assets, markets, history: { OPENAI: { bydfi: [{ ...raw, timestamp: clock / 1000 - 3600 }] } } });
+assert(!window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote, 'Old history must not become a fresh raw card');
+const successorPoint = { ...raw, asset_id: 'ANTHROPIC', exchange: 'binance', token_price: 98,
+  timestamp: clock / 1000, calibration_status: 'calibrated' };
+feed.handleSnapshot({ assets, markets, history: { ANTHROPIC: { binance: [
+  { ...successorPoint, token_price: 1300, timestamp: Date.parse('2026-11-17T08:00:00Z') / 1000 }, successorPoint
+] } } });
+assert.deepEqual(window.SERIES.ANTHROPIC.binance, [98 * 13116075288]);
+feed.handleTick({ ...successorPoint, token_price: 1300, timestamp: Date.parse('2026-11-17T08:00:00Z') / 1000 });
+assert.equal(window.LISTINGS.ANTHROPIC[0].tokenPrice, 98, 'Queued legacy prices cannot cross successor boundary');
+Date.now = realNow;
+console.log('PASS: quote-only visibility, valuation isolation, disconnected and stale-history suppression');
+
+// Exercise the real socket callbacks, including close/reopen without a snapshot.
+const sockets = [];
+global.WebSocket = function () { sockets.push(this); };
+eval(fs.readFileSync(path.join(root, 'data-live.js'), 'utf8'));
+const socket = sockets.at(-1);
+socket.onopen();
+socket.onmessage({ data: JSON.stringify({ type: 'snapshot', assets, markets, history: {} }) });
+socket.onmessage({ data: JSON.stringify({ type: 'tick', quote: { ...raw, timestamp: Date.now() / 1000 } }) });
+assert(window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote);
+socket.onclose();
+assert(!window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote, 'Socket close must immediately remove raw cards');
+timers.at(-1).callback();
+sockets.at(-1).onopen();
+assert(!window.DISABLED.OPENAI.find(m => m.ex === 'bydfi').rawQuote, 'Reopening socket must not revive cached quotes');
+console.log('PASS: actual socket close/reopen clears raw prices until fresh data');

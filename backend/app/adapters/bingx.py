@@ -8,7 +8,8 @@ returned three relevant contracts:
   NCSKSPACEXP2USD-USDT  "SPACEX(PreStocks)-USDT" BingX PreStocks share-price-like
   NCSKOPENAIV2USD-USDT  "OPENAI(VNTL)-USDT"      Ventuals-mirror valuation perp
 
-ANTHROPIC is NOT yet listed on BingX (2026-05-20).
+The newer native AI contracts use the 2USD suffix; their current trading
+status is checked before accepting a ticker, including during rebases.
 
 Endpoints (public, no auth):
   GET https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=<sym>
@@ -47,9 +48,10 @@ REST_BASE = "https://open-api.bingx.com"
 # by discover(), which is asset-id-driven; we return the first match.
 _ASSET_TO_BINGX_SYMBOLS: dict[str, list[str]] = {
     "SPACEX":    ["NCSKSPACEXV2USD-USDT", "NCSKSPACEXP2USD-USDT"],
-    "OPENAI":    ["NCSKOPENAIV2USD-USDT"],
-    "ANTHROPIC": [],  # not yet listed on BingX as of 2026-05-20
+    "OPENAI":    ["NCSKOPENAI2USD-USDT", "NCSKOPENAIV2USD-USDT"],
+    "ANTHROPIC": ["NCSKANTHROPIC2USD-USDT"],
 }
+_NATIVE_AI_SYMBOLS = {"NCSKOPENAI2USD-USDT", "NCSKANTHROPIC2USD-USDT"}
 
 # Funding accrues every 8h on the perps (premiumIndex returns
 # `lastFundingRate` + `nextFundingTime`). 5s poll is plenty.
@@ -111,6 +113,15 @@ class BingXAdapter(ExchangeAdapter):
         return DiscoverResult(found=False, error="no candidate returned a ticker")
 
     async def _fetch_ticker(self, client: httpx.AsyncClient, symbol: str) -> dict | None:
+        if symbol in _NATIVE_AI_SYMBOLS:
+            response = await client.get(f"{REST_BASE}/openApi/swap/v2/quote/contracts")
+            response.raise_for_status()
+            body = response.json()
+            if body.get("code") != 0:
+                return None
+            contract = next((c for c in body.get("data", []) if c.get("symbol") == symbol), None)
+            if not contract or contract.get("status") != 1:
+                return None
         r = await client.get(
             f"{REST_BASE}/openApi/swap/v2/quote/ticker",
             params={"symbol": symbol},
@@ -120,6 +131,15 @@ class BingXAdapter(ExchangeAdapter):
         if not isinstance(body, dict) or body.get("code") != 0:
             return None
         data = body.get("data")
+        if symbol in _NATIVE_AI_SYMBOLS:
+            if not isinstance(data, dict) or data.get("symbol") != symbol:
+                return None
+            source_ms = _to_float(data.get("closeTime"))
+            price = _to_float(data.get("lastPrice"))
+            if source_ms is None or not -30 <= time.time() - source_ms / 1000 < 60:
+                return None
+            if price is None or price <= 0:
+                return None
         return data if isinstance(data, dict) else None
 
     async def _fetch_open_interest(self, client: httpx.AsyncClient, symbol: str) -> float | None:
@@ -187,12 +207,20 @@ class BingXAdapter(ExchangeAdapter):
                     # closeTime and our `(market_id, timestamp)` PRIMARY KEY
                     # in store.py would then `INSERT OR IGNORE` them away.
                     ts = time.time()
+                    if market.symbol in _NATIVE_AI_SYMBOLS:
+                        # Native AI tick age is the exchange's ticker-window
+                        # close time, not the time this process polled it.
+                        ts = float(ticker["closeTime"]) / 1000
 
                     # OI + funding are perp-only; both are best-effort (errors
                     # don't break the tick — the price is the primary signal).
                     # Slice 5 F66: openInterest is already USDT-denominated;
                     # no multiplication.
                     oi_usd = await self._fetch_open_interest(client, market.symbol)
+                    if market.symbol in _NATIVE_AI_SYMBOLS:
+                        # Native AI OI unit not verified. Preserve legacy SpaceX
+                        # semantics without inferring a new USD conversion.
+                        oi_usd = None
                     funding_rate = await self._fetch_funding_rate(client, market.symbol)
 
                     self._last_tick_at = time.time()

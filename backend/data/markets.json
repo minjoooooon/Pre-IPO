@@ -246,8 +246,9 @@
       "ratio_calibrated_at": null,
       "confidence": 0,
       "doc_url": "https://www.mexc.com/futures/OPENAI_USDT",
-      "notes": "Review 2026-11-17: previous inferred share conversion withdrawn. Current instrument basis or lifecycle not verified; excluded from valuation comparison. Linked source is historical and does not establish a current conversion.",
-      "rules_reviewed_at": "2026-11-17T02:00:00Z"
+      "notes": "Public contract state0 verified Nov17 10:50 UTC. Valuation denominator not independently verified; raw price only, excluded from valuation comparison.",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
+      "quote_only": true
     },
     {
       "asset_id": "ANTHROPIC",
@@ -261,7 +262,7 @@
       "ratio_calibrated_at": "2026-11-17T02:59:24Z",
       "confidence": 80,
       "doc_url": "https://www.mexc.com/announcements/article/mexc-to-rebase-anthropic-pre-ipo-futures-and-rename-to-antusdt-on-nov-17-2026-17827791539765",
-      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPIC_USDT state=0. Rebase13.116 and display rename ANTUSDT scheduled08:30-11:00UTC; funding continues during halt; post-event API symbol needs verification. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T08:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
+      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPIC_USDT state=0. Rebase13.116 and display rename ANTUSDT scheduled08:30-11:00UTC; funding continues during halt; post-event API symbol needs verification. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T08:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion. Recheck Nov17 10:50 UTC: old contract state2; no ANT_USDT in public contract list. Still excluded.",
       "rules_reviewed_at": "2026-11-17T02:00:00Z",
       "valuation_basis_shares": 1000000000.0,
       "valuation_valid_until": "2026-11-17T08:30:00Z"
@@ -315,36 +316,34 @@
     {
       "asset_id": "ANTHROPIC",
       "exchange": "binance",
-      "symbol": "ANTHROPICUSDT",
+      "symbol": "ANTUSDT",
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
       "ratio_source": "official",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "ratio_calibrated_at": "2026-11-17T10:50:00Z",
       "confidence": 80,
       "doc_url": "https://www.binance.com/en/support/announcement/detail/0dc9c6bdb729413ba54ba68ca83403e1",
-      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPICUSDT status=TRADING. Rebase13.116 and rename ANTUSDT scheduled08:30-11:00UTC; orders canceled and funding suspended. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T08:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
-      "valuation_basis_shares": 1000000000.0,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z",
-      "valuation_valid_until": "2026-11-17T08:30:00Z"
+      "notes": "Verified Nov17 10:50 UTC: ANTUSDT successor active (exchangeInfo TRADING). Official post-rebase estimated denominator 13,116,075,288; not fully diluted shares. History before verification excluded to avoid mixing old contract prices.",
+      "valuation_basis_shares": 13116075288,
+      "rules_reviewed_at": "2026-11-17T10:50:00Z"
     },
     {
       "asset_id": "ANTHROPIC",
       "exchange": "bitget-futures",
-      "symbol": "ANTHROPICUSDT",
+      "symbol": "ANTUSDT",
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
       "ratio_source": "official",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "ratio_calibrated_at": "2026-11-17T10:50:00Z",
       "confidence": 80,
       "doc_url": "https://www.bitget.com/support/articles/12560603900687",
-      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPICUSDT symbolStatus=normal. Rebase13.1160 and rename ANTUSDT scheduled09:30-10:00UTC; orders canceled and funding suspended. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T09:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
-      "valuation_basis_shares": 1000000000.0,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z",
-      "valuation_valid_until": "2026-11-17T09:30:00Z"
+      "notes": "Verified Nov17 10:50 UTC: ANTUSDT successor active (symbolStatus normal, live ticker). Official post-rebase estimated denominator 13,116,075,288; not fully diluted shares. History before verification excluded to avoid mixing old contract prices.",
+      "valuation_basis_shares": 13116075288,
+      "rules_reviewed_at": "2026-11-17T10:50:00Z"
     },
     {
       "asset_id": "ANTHROPIC",
@@ -358,15 +357,15 @@
       "ratio_calibrated_at": null,
       "confidence": 0,
       "doc_url": "https://announcements.bybit.com/en/article/important-anthropicusdt-split-and-rename-nov-16--artfe526916e960/",
-      "notes": "Verified public continuous-trading feed 2026-11-17 03:29 UTC. Official final valuation denominator not disclosed/verified; raw price only, excluded from valuation comparisons.",
+      "notes": "Verified public continuous trading Nov17 10:48 UTC. Valuation denominator not independently established; raw price only, excluded from valuation comparisons.",
       "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true
     },
     {
       "asset_id": "ANTHROPIC",
       "exchange": "bydfi",
-      "symbol": "ANTHROPICUSDT",
+      "symbol": "ANT_USDT",
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
@@ -374,10 +373,10 @@
       "ratio_reference_fdv": null,
       "ratio_calibrated_at": null,
       "confidence": 0,
-      "doc_url": "https://www.bydfi.com/announcements/all",
-      "notes": "Nov13 notice: close-only; scheduled delist Nov17 07:00 UTC. Remaining positions automatically settled under delisting rules (e.g. final-minute average index); orders canceled. No adapter or confirmed successor.",
+      "doc_url": "https://www.bydfi.com/announcements/article/bydfi-listing-antusdt-perpetual-contract-trading-pair-announcement-17827791534766",
+      "notes": "Old ANTHROPIC_USDT confirmed state3 (delisted) Nov17 10:48 UTC. New ANT_USDT announced for Nov17 12:00 UTC; API opening time still future at10:50 UTC. Successor remains disabled pending verified trading; no verified valuation denominator.",
       "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z"
+      "rules_reviewed_at": "2026-11-17T10:50:00Z"
     },
     {
       "asset_id": "ANTHROPIC",
@@ -391,9 +390,9 @@
       "ratio_calibrated_at": null,
       "confidence": 0,
       "doc_url": "https://www.gate.com/announcements/article/102800",
-      "notes": "Verified public continuous-trading feed 2026-11-17 03:29 UTC. Official final valuation denominator not disclosed/verified; raw price only, excluded from valuation comparisons.",
+      "notes": "Verified public continuous trading Nov17 10:48 UTC. Valuation denominator not independently established; raw price only, excluded from valuation comparisons.",
       "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true
     },
     {
@@ -439,8 +438,8 @@
       "ratio_source": "uncalibrated",
       "confidence": 0,
       "doc_url": "https://bybit-exchange.github.io/docs/v5/market/instrument",
-      "notes": "Public instrument verified PreLaunch / ContinuousTrading. No verified valuation denominator; price only.",
-      "rules_reviewed_at": "2026-11-17T03:29:00Z",
+      "notes": "Verified public continuous trading Nov17 10:48 UTC. Valuation denominator not independently established; raw price only, excluded from valuation comparisons.",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true
     },
     {
@@ -453,8 +452,8 @@
       "ratio_source": "uncalibrated",
       "confidence": 0,
       "doc_url": "https://www.gate.com/docs/apiv4/index.html",
-      "notes": "Public USDT futures contract verified trading. No verified valuation denominator; price only.",
-      "rules_reviewed_at": "2026-11-17T03:29:00Z",
+      "notes": "Verified public continuous trading Nov17 10:48 UTC. Valuation denominator not independently established; raw price only, excluded from valuation comparisons.",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true
     },
     {
@@ -468,7 +467,7 @@
       "confidence": 0,
       "doc_url": "https://www.gate.com/announcements/article/102800",
       "notes": "Legacy futures contract coexists with ANT_USDT. Reduce-only Nov19 07:30 UTC, settles08:00 UTC. No verified denominator; price only.",
-      "rules_reviewed_at": "2026-11-17T03:29:00Z",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true,
       "valuation_valid_until": "2026-11-19T08:00:00Z"
     },
@@ -482,7 +481,7 @@
       "ratio_source": "official",
       "confidence": 95,
       "doc_url": "https://bingxservice.zendesk.com/hc/en-001/articles/18397397995791-BingX-Adjusts-the-ANTHROPIC-Perpetual-Futures-Contract-Share-and-Renaming-It-to-ANT",
-      "notes": "Current legacy1B valuation scale until Nov17 08:30 UTC adjustment. ANT expected resume11:10 UTC; not automatically enabled.",
+      "notes": "Current legacy1B valuation scale until Nov17 08:30 UTC adjustment. ANT expected resume11:10 UTC; not automatically enabled. Recheck Nov17 10:48 UTC: legacy API status25 (halted); excluded. Successor not confirmed.",
       "rules_reviewed_at": "2026-11-17T03:29:00Z",
       "valuation_basis_shares": 1000000000.0,
       "valuation_valid_until": "2026-11-17T08:30:00Z"
@@ -497,9 +496,49 @@
       "ratio_source": "uncalibrated",
       "confidence": 0,
       "doc_url": "https://bingx.com/en/support",
-      "notes": "Current stock perpetual verified public contract active03:31 UTC. Official valuation denominator pending verification; price only.",
-      "rules_reviewed_at": "2026-11-17T03:29:00Z",
+      "notes": "Verified public contract status1 Nov17 10:48 UTC. Official valuation denominator and OI units unverified; price only, no valuation comparison.",
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
       "quote_only": true
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "bydfi",
+      "symbol": "OPENAI_USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": null,
+      "ratio_source": "uncalibrated",
+      "confidence": 0,
+      "quote_only": true,
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
+      "doc_url": "https://www.bydfi.com/futures/OPENAI_USDT",
+      "notes": "Verified public website API Nov17 10:50 UTC: state0, live ticker, eight-hour funding. Website transport may change. Valuation denominator and OI units unverified; price only."
+    },
+    {
+      "asset_id": "ANTHROPIC",
+      "exchange": "blofin",
+      "symbol": "ANT-USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": null,
+      "ratio_source": "uncalibrated",
+      "confidence": 0,
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
+      "doc_url": "https://blofin.com/en/support/Announcement/Futures-Listing/16118428649770-ANTHROPICUSDT-Pre-IPO-Perp-Update-Contract-Size-Adjustment-and-Rename-to-ANTUSDT-2026-11-17",
+      "notes": "Public API returned HTTP451 region restriction Nov17 10:50 UTC. No live connection or current contract verification. ANT rebase/resumption scheduled12:00 UTC, not confirmed."
+    },
+    {
+      "asset_id": "OPENAI",
+      "exchange": "blofin",
+      "symbol": "OPENAI-USDT",
+      "venue": "CEX",
+      "structure": "perp",
+      "share_ratio": null,
+      "ratio_source": "uncalibrated",
+      "confidence": 0,
+      "rules_reviewed_at": "2026-11-17T10:50:00Z",
+      "doc_url": "https://docs.blofin.com/index.html",
+      "notes": "Public API returned HTTP451 region restriction Nov17 10:50 UTC. No live connection or current contract verification. Listing and valuation basis not verified."
     }
   ]
 }
