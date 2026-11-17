@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 VenueType = Literal["DEX", "CEX"]
 Structure = Literal["SPV-backed", "SPV-mirror", "synthetic", "mirror-credit", "perp", "pre-ipo-certificate"]
@@ -56,6 +56,7 @@ class Market(BaseModel):
     # Explicit pricing denominator (or valuation-unit scale), NOT diluted shares.
     valuation_basis_shares: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     rules_reviewed_at: datetime | None = None
+    valuation_valid_until: AwareDatetime | None = None
 
     @property
     def market_id(self) -> str:

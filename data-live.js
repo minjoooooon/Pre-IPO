@@ -56,6 +56,56 @@
   const assetsById = {}; // "SPACEX" -> Asset
   let pendingDispatch = false;
   let lastDispatch = 0;
+  let expiryTimer = null;
+
+  function isExpired(m, timestamp = 0) {
+    if (!m || !m.valuation_valid_until) return false;
+    const end = Date.parse(m.valuation_valid_until);
+    return !Number.isFinite(end) || Math.max(Date.now(), timestamp * 1000) >= end;
+  }
+
+  function recalculateConsensus(assetId) {
+    const asset = window.ASSETS.find(a => a.id === assetId);
+    if (!asset) return;
+    let weight = 0, value = 0;
+    (window.LISTINGS[assetId] || []).forEach(r => {
+      const size = r.oi > 0 ? r.oi : (r.vol24 || 0);
+      const w = (r.confidence / 100) * Math.sqrt(Math.max(size, 1));
+      const valuation = r.valuationBasis ? r.tokenPrice * r.valuationBasis : r.tokenPrice / r.shareRatio * asset.fdvShares;
+      weight += w;
+      value += w * valuation;
+    });
+    asset.consensusFDV = weight > 0 ? value / weight : 0;
+  }
+
+  function expireMarkets() {
+    const affected = new Set();
+    Object.values(marketsById).forEach(m => {
+      if (!isExpired(m)) return;
+      affected.add(m.asset_id);
+      window.LISTINGS[m.asset_id] = (window.LISTINGS[m.asset_id] || []).filter(r => r.ex !== m.exchange);
+      if (window.SERIES[m.asset_id]) delete window.SERIES[m.asset_id][m.exchange];
+      if (window.FUNDING[m.asset_id]) delete window.FUNDING[m.asset_id][m.exchange];
+    });
+    if (affected.size) {
+      affected.forEach(recalculateConsensus);
+      rebuildDisabled(window.PRE_IPO_LIVE.statuses);
+      scheduleDispatch();
+    }
+  }
+
+  function armExpiryTimer() {
+    if (expiryTimer != null) clearTimeout(expiryTimer);
+    expiryTimer = null;
+    const next = Object.values(marketsById)
+      .map(m => Date.parse(m.valuation_valid_until))
+      .filter(t => Number.isFinite(t) && t > Date.now())
+      .sort((a, b) => a - b)[0];
+    if (next != null) expiryTimer = setTimeout(() => {
+      expireMarkets();
+      armExpiryTimer();
+    }, Math.min(next - Date.now(), 2147483647));
+  }
 
   function structureFromMarket(m) {
     return m.structure || "perp";
@@ -77,6 +127,7 @@
     // Disabled / uncalibrated / zero-or-negative ratios are routed to
     // DISABLED instead (or simply dropped from LISTINGS on a config update).
     if (!m) return false;
+    if (isExpired(m)) return false;
     if (m.ratio_source === "uncalibrated") return false;
     if (Number.isFinite(m.valuation_basis_shares) && m.valuation_basis_shares > 0) return true;
     if (m.share_ratio == null) return false;
@@ -216,7 +267,7 @@
         venue: m.venue,
         structure: m.structure,
         symbol: m.symbol,
-        reason: m.notes || (st && st.last_error) || "uncalibrated",
+        reason: (isExpired(m) ? "Pricing basis expired; awaiting verified post-transition rules. " : "") + (m.notes || (st && st.last_error) || "uncalibrated"),
         rulesReviewedAt: m.rules_reviewed_at,
         docUrl: m.doc_url || null,
         ratioSource: m.ratio_source,
@@ -256,7 +307,7 @@
         if (!isLiveMarket(m)) { exMap[exchange] = []; return; }
         const cutoff = m.rules_reviewed_at ? Date.parse(m.rules_reviewed_at) / 1000 : 0;
         const pts = exMap[exchange]
-          .filter(q => !cutoff || q.timestamp >= cutoff)
+          .filter(q => (!cutoff || q.timestamp >= cutoff) && !isExpired(m, q.timestamp))
           .map(q => cutoff && m.valuation_basis_shares ? {
             ...q,
             implied_fdv: q.token_price * m.valuation_basis_shares,
@@ -305,16 +356,19 @@
 
     window.PRE_IPO_LIVE.statuses = msg.statuses || [];
     window.PRE_IPO_LIVE.lastSnapshotAt = Date.now();
+    armExpiryTimer();
     scheduleDispatch();
   }
 
   function handleTick(quote) {
+    expireMarkets();
     if (!quote || typeof quote.asset_id !== "string" || typeof quote.exchange !== "string") return;
     if (typeof quote.token_price !== "number" || !isFinite(quote.token_price)) return;
     const asset_id = quote.asset_id;
     const exchange = quote.exchange;
     const market = marketsById[`${asset_id}:${exchange}`];
     if (!market) return;
+    if (isExpired(market, quote.timestamp)) return;
     // share_ratio <= 0 is treated identically to null — a bad calibrate write
     // can zero the ratio and would otherwise propagate Infinity into the
     // consensus rollup at line ~305.
@@ -335,23 +389,7 @@
     pushSeries(asset_id, exchange, quote.implied_fdv);
     pushFunding(asset_id, exchange, quote.funding_rate);
 
-    // Update ASSETS delta24h on every tick is overkill; just bump consensusFDV
-    const asset = window.ASSETS.find((a) => a.id === asset_id);
-    if (asset && quote.implied_fdv != null) {
-      // rolling consensus from LISTINGS. Size proxy = oi if available (perp)
-      // else vol24 (spot/mirror). Both USD-denominated by adapters.
-      let wsum = 0;
-      let vsum = 0;
-      arr.forEach((r) => {
-        const size = (r.oi && r.oi > 0) ? r.oi : (r.vol24 || 0);
-        const w = (r.confidence / 100) * Math.sqrt(Math.max(size, 1));
-        const impl = r.tokenPrice / r.shareRatio;
-        const fdv = r.valuationBasis ? r.tokenPrice * r.valuationBasis : impl * asset.fdvShares;
-        wsum += w;
-        vsum += w * fdv;
-      });
-      if (wsum > 0) asset.consensusFDV = vsum / wsum;
-    }
+    recalculateConsensus(asset_id);
 
     window.PRE_IPO_LIVE.lastTickAt = Date.now();
     scheduleDispatch();
@@ -423,6 +461,8 @@
         };
       }
     });
+    expireMarkets();
+    armExpiryTimer();
     scheduleDispatch();
   }
 

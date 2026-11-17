@@ -19,16 +19,33 @@ for key in ("OPENAI:binance", "OPENAI:bitget-futures", "OPENAI:hl-vntl", "ANTHRO
     m = markets[key]
     q = normalize(tick, m, assets[m.asset_id], now=100)
     assert q.implied_fdv == 125_000_000_000, (key, q)
-for key in ("ANTHROPIC:binance", "ANTHROPIC:bitget-futures", "ANTHROPIC:mexc", "ANTHROPIC:bybit", "ANTHROPIC:kucoin", "ANTHROPIC:bydfi"):
+for key in ("ANTHROPIC:binance", "ANTHROPIC:bitget-futures", "ANTHROPIC:mexc"):
+    m = markets[key]
+    deadline = m.valuation_valid_until.timestamp()
+    live_tick = tick.model_copy(update={"timestamp": deadline - 1})
+    assert normalize(live_tick, m, assets[m.asset_id], now=deadline - 1).implied_fdv == 125e9
+    assert normalize(live_tick, m, assets[m.asset_id], now=deadline).implied_fdv is None
+    future_tick = tick.model_copy(update={"timestamp": deadline})
+    assert normalize(future_tick, m, assets[m.asset_id], now=deadline - 1).implied_fdv is None
+for key in ("ANTHROPIC:bybit", "ANTHROPIC:kucoin", "ANTHROPIC:bydfi"):
     m = markets[key]
     q = normalize(tick, m, assets[m.asset_id], now=100)
     assert q.implied_fdv is None and q.calibration_status == "uncalibrated", key
     assert m.notes and m.doc_url
 print("PASS: explicit valuation basis, no fictitious share price, new venues and transition exclusion")
+xyz = markets["ANTHROPIC:hl-xyz"]
+assert xyz.ratio_source == "back-solved" and "EXTERNAL" in xyz.notes
+assert normalize(tick, xyz, assets["ANTHROPIC"], now=100).implied_fdv == 125 * 13_116_075_288
+from pydantic import ValidationError
+try:
+    Market(**{**markets["ANTHROPIC:binance"].model_dump(), "valuation_valid_until": "2026-11-17T08:30:00"})
+    raise AssertionError("Timezone-naive deadline accepted")
+except ValidationError:
+    pass
 
 # Historical normalization must not cross the reviewed pricing-basis boundary.
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from app.aggregator import Aggregator
 from app.registry import Registry
 
@@ -46,6 +63,14 @@ async def check_history():
         points = agg.snapshot_message()["history"]["OPENAI"]["okx"]
         assert len(points) == 1 and points[0]["implied_fdv"] == 1250e9
         assert points[0]["implied_share_price"] is None
+        m = markets["ANTHROPIC:binance"]
+        end = m.valuation_valid_until.timestamp()
+        live = normalize(tick.model_copy(update={"timestamp": end - 1}), m, assets["ANTHROPIC"], now=end - 1)
+        agg._ring_push(live)
+        with patch("app.aggregator.time.time", return_value=end - 1):
+            assert agg.snapshot_message()["history"]["ANTHROPIC"]["binance"]
+        with patch("app.aggregator.time.time", return_value=end):
+            assert "binance" not in agg.snapshot_message()["history"]["ANTHROPIC"]
     finally:
         await agg.stop()
 

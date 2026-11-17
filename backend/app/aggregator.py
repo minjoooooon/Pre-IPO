@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from collections import deque
 from collections.abc import Iterable
 
@@ -46,6 +47,9 @@ class Aggregator:
             rows = await self._store.replay_recent(asset.id, settings.history_replay_seconds)
             for row in rows:
                 market = self._registry.get_market(f"{row['asset_id']}:{row['exchange']}")
+                if market and market.valuation_valid_until:
+                    if max(time.time(), row["timestamp"]) >= market.valuation_valid_until.timestamp():
+                        continue
                 if market and market.rules_reviewed_at:
                     cutoff = market.rules_reviewed_at.timestamp()
                     if row["timestamp"] < cutoff or market.ratio_source == "uncalibrated":
@@ -142,10 +146,18 @@ class Aggregator:
 
     def snapshot_message(self) -> dict:
         history: dict[str, dict[str, list[dict]]] = {}
+        now = time.time()
         for asset_id, ex_map in self._ring.items():
-            history[asset_id] = {
-                exchange: [q.model_dump(mode="json") for q in dq] for exchange, dq in ex_map.items()
-            }
+            history[asset_id] = {}
+            for exchange, dq in ex_map.items():
+                market = self._registry.get_market(f"{asset_id}:{exchange}")
+                deadline = market.valuation_valid_until.timestamp() if market and market.valuation_valid_until else None
+                if deadline is not None and now >= deadline:
+                    continue
+                history[asset_id][exchange] = [
+                    q.model_dump(mode="json") for q in dq
+                    if deadline is None or q.timestamp < deadline
+                ]
         statuses: list[dict] = []
         if self._statuses_cb is not None:
             try:

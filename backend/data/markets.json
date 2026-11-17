@@ -256,14 +256,15 @@
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
-      "ratio_source": "uncalibrated",
+      "ratio_source": "official",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": null,
-      "confidence": 0,
+      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "confidence": 80,
       "doc_url": "https://www.mexc.com/announcements/article/mexc-to-rebase-anthropic-pre-ipo-futures-and-rename-to-antusdt-on-nov-17-2026-17827791539765",
-      "notes": "Scheduled Nov17 08:30-11:00 UTC rebase13.116; display ticker ANTUSDT after completion. Probe02:00 UTC legacy ANTHROPIC_USDT state0. Post-event API symbol and resumption require verification. Orders/bots canceled; funding continues during halt. Excluded pending review.",
+      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPIC_USDT state=0. Rebase13.116 and display rename ANTUSDT scheduled08:30-11:00UTC; funding continues during halt; post-event API symbol needs verification. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T08:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
       "rules_reviewed_at": "2026-11-17T02:00:00Z",
-      "valuation_basis_shares": null
+      "valuation_basis_shares": 1000000000.0,
+      "valuation_valid_until": "2026-11-17T08:30:00Z"
     },
     {
       "asset_id": "SPACEX",
@@ -362,14 +363,15 @@
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
-      "ratio_source": "uncalibrated",
+      "ratio_source": "official",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": null,
-      "confidence": 0,
+      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "confidence": 80,
       "doc_url": "https://www.binance.com/en/support/announcement/detail/0dc9c6bdb729413ba54ba68ca83403e1",
-      "notes": "Scheduled Nov17 08:30-11:00 UTC rebase13.116 and rename ANTUSDT;1B ->13,116,075,288. Probe02:00 UTC still TRADING under legacy symbol. Comparison withheld pending post-event verification. Orders canceled; positions settled/reopened; funding suspended.",
-      "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z"
+      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPICUSDT status=TRADING. Rebase13.116 and rename ANTUSDT scheduled08:30-11:00UTC; orders canceled and funding suspended. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T08:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
+      "valuation_basis_shares": 1000000000.0,
+      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "valuation_valid_until": "2026-11-17T08:30:00Z"
     },
     {
       "asset_id": "ANTHROPIC",
@@ -378,14 +380,15 @@
       "venue": "CEX",
       "structure": "perp",
       "share_ratio": null,
-      "ratio_source": "uncalibrated",
+      "ratio_source": "official",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": null,
-      "confidence": 0,
+      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "confidence": 80,
       "doc_url": "https://www.bitget.com/support/articles/12560603900687",
-      "notes": "Scheduled Nov17 09:30-10:00 UTC rebase13.1160 and rename ANTUSDT;1B ->13,116,075,288. Probe02:00 UTC legacy symbol normal. Comparison withheld pending post-event verification. Orders canceled; funding suspended; restart time is estimated.",
-      "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z"
+      "notes": "Verified2026-11-17 02:59:24UTC: PublicAPI ANTHROPICUSDT symbolStatus=normal. Rebase13.1160 and rename ANTUSDT scheduled09:30-10:00UTC; orders canceled and funding suspended. Current official estimated denominator1B. Comparison automatically expires at2026-11-17T09:30:00Z; no automatic post-rebase activation. Future reference13,116,075,288 is not applied before completion.",
+      "valuation_basis_shares": 1000000000.0,
+      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "valuation_valid_until": "2026-11-17T09:30:00Z"
     },
     {
       "asset_id": "ANTHROPIC",
@@ -490,14 +493,15 @@
       "venue": "DEX",
       "structure": "perp",
       "share_ratio": null,
-      "ratio_source": "uncalibrated",
+      "ratio_source": "back-solved",
       "ratio_reference_fdv": null,
-      "ratio_calibrated_at": null,
-      "confidence": 0,
+      "ratio_calibrated_at": "2026-11-17T02:59:24Z",
+      "confidence": 65,
       "doc_url": "https://docs.trade.xyz/perpetuals/specifications-and-schedules/pre-ipo-specification-index/",
-      "notes": "Official XYZ specification references1 Anthropic Class A share. A current fully diluted share count and live contract status were not verified; excluded rather than multiplying by obsolete1.79B estimate. Anticipated listing date is reference-only.",
-      "valuation_basis_shares": null,
-      "rules_reviewed_at": "2026-11-17T02:00:00Z"
+      "notes": "XYZ official specification:1 contract unit references1 Anthropic ClassA share. PublicAPI xyz:ANT present/notdelisted at2026-11-17 02:59:24UTC, mark97.164. Comparison uses EXTERNAL common-share reference13,116,075,288 from OKX offering-disclosure methodology, NOT a XYZ-published denominator or fully diluted count. Price x external reference is an estimated comparable company valuation. Primary external reference: https://www.okx.com/en-us/help/okx-to-execute-a-rebase-on-anthropic-perpetuals-and-x-perp . No stock ownership; anticipated IPO date is reference-only.",
+      "valuation_basis_shares": 13116075288,
+      "rules_reviewed_at": "2026-11-17T02:00:00Z",
+      "valuation_basis_source_url": "https://www.okx.com/en-us/help/okx-to-execute-a-rebase-on-anthropic-perpetuals-and-x-perp"
     }
   ]
 }

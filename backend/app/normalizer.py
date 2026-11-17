@@ -32,6 +32,8 @@ def normalize(tick: Tick, market: Market, asset: Asset, now: float | None = None
     # or emit a NaN/Inf FDV.
     bad_ratio = (
         market.ratio_source == "uncalibrated"
+        or (market.valuation_valid_until is not None and
+            max(now, tick.timestamp) >= market.valuation_valid_until.timestamp())
         or (market.valuation_basis_shares is None and (
             market.share_ratio is None
             or market.share_ratio <= 0
