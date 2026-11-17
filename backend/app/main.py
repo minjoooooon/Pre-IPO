@@ -12,6 +12,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from .adapters.bybit import BybitAdapter
+from .adapters.gate_futures import GateFuturesAdapter
 from .adapters.binance import BinanceAdapter
 from .adapters.bingx import BingXAdapter
 from .adapters.bitget import BitgetAdapter
@@ -92,6 +94,9 @@ def _persist_admin_token(token: str) -> Path:
 
 # Wiring registry: which adapter handles which exchange_id
 _ADAPTER_CLASSES = {
+    "bybit": BybitAdapter,
+    "gate-futures": GateFuturesAdapter,
+    "gate-futures-legacy": GateFuturesAdapter,
     # Hyperliquid HIP-3 builder DEXes are distinct routes (different `dex`
     # parameter on /info), so each is registered as its own exchange key.
     # They share the HyperliquidAdapter class — the adapter reads
@@ -179,7 +184,7 @@ async def lifespan(app: FastAPI):
             # Disable adapters whose market is still uncalibrated. The previous
             # `hyperliquid` blanket-disable is gone now that the adapter understands
             # HIP-3 builder DEXes (hl-xyz, hl-vntl) via dex-prefixed symbols.
-            if market.ratio_source == "uncalibrated":
+            if market.ratio_source == "uncalibrated" and not market.quote_only:
                 supervisor.disable(market.market_id, "uncalibrated: ratio not set")
 
         await aggregator.start()

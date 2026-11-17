@@ -43,6 +43,7 @@
   // we know about but can't stream (uncalibrated or supervisor-disabled).
   // NormTable renders these as ghost rows so users see what's missing.
   window.DISABLED = {};
+  const rawQuotes = {};
   window.PRE_IPO_LIVE = {
     connected: false,
     lastSnapshotAt: null,
@@ -83,6 +84,7 @@
     Object.values(marketsById).forEach(m => {
       if (!isExpired(m)) return;
       affected.add(m.asset_id);
+      delete rawQuotes[`${m.asset_id}:${m.exchange}`];
       window.LISTINGS[m.asset_id] = (window.LISTINGS[m.asset_id] || []).filter(r => r.ex !== m.exchange);
       if (window.SERIES[m.asset_id]) delete window.SERIES[m.asset_id][m.exchange];
       if (window.FUNDING[m.asset_id]) delete window.FUNDING[m.asset_id][m.exchange];
@@ -126,7 +128,7 @@
     // A market that's "live" enough to keep in LISTINGS / drive a tick row.
     // Disabled / uncalibrated / zero-or-negative ratios are routed to
     // DISABLED instead (or simply dropped from LISTINGS on a config update).
-    if (!m) return false;
+    if (!m || m.quote_only) return false;
     if (isExpired(m)) return false;
     if (m.ratio_source === "uncalibrated") return false;
     if (Number.isFinite(m.valuation_basis_shares) && m.valuation_basis_shares > 0) return true;
@@ -263,6 +265,8 @@
       if (!isDisabled) return;
       if (!next[m.asset_id]) next[m.asset_id] = [];
       next[m.asset_id].push({
+        rawQuote: m.quote_only && !isExpired(m) ? rawQuotes[mid] : null,
+        quoteOnly: !!m.quote_only,
         ex: m.exchange,
         venue: m.venue,
         structure: m.structure,
@@ -294,6 +298,7 @@
     });
     rebuildDisabled(statuses);
 
+    Object.keys(rawQuotes).forEach(k => delete rawQuotes[k]);
     // Reset LISTINGS / SERIES / FUNDING from history
     window.LISTINGS = {};
     window.SERIES = {};
@@ -304,6 +309,11 @@
       window.SERIES[asset_id] = {};
       Object.keys(exMap).forEach((exchange) => {
         const m = marketsById[`${asset_id}:${exchange}`];
+        if (m && m.quote_only && !isExpired(m)) {
+          const valid = exMap[exchange].filter(q => Number.isFinite(q.token_price) && q.token_price > 0 && !isExpired(m, q.timestamp)
+            && (!m.rules_reviewed_at || q.timestamp >= Date.parse(m.rules_reviewed_at) / 1000));
+          if (valid.length) rawQuotes[`${asset_id}:${exchange}`] = makeListingRow(valid[valid.length - 1], m);
+        }
         if (!isLiveMarket(m)) { exMap[exchange] = []; return; }
         const cutoff = m.rules_reviewed_at ? Date.parse(m.rules_reviewed_at) / 1000 : 0;
         const pts = exMap[exchange]
@@ -355,6 +365,7 @@
     );
 
     window.PRE_IPO_LIVE.statuses = msg.statuses || [];
+    rebuildDisabled(statuses);
     window.PRE_IPO_LIVE.lastSnapshotAt = Date.now();
     armExpiryTimer();
     scheduleDispatch();
@@ -369,6 +380,13 @@
     const market = marketsById[`${asset_id}:${exchange}`];
     if (!market) return;
     if (isExpired(market, quote.timestamp)) return;
+    if (market.quote_only) {
+      if (!(quote.token_price > 0)) return;
+      rawQuotes[`${asset_id}:${exchange}`] = makeListingRow(quote, market);
+      rebuildDisabled(window.PRE_IPO_LIVE.statuses);
+      scheduleDispatch();
+      return;
+    }
     // share_ratio <= 0 is treated identically to null — a bad calibrate write
     // can zero the ratio and would otherwise propagate Infinity into the
     // consensus rollup at line ~305.

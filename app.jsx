@@ -1711,6 +1711,16 @@ function VenueCard({ r, refFdv, cons }) {
 }
 
 function DisabledVenueCard({ d }) {
+  if (d.rawQuote) return (
+    <div className="venue-card" title={d.reason}>
+      <div className="vc-head"><span className="vc-name">{d.ex}</span><span className="mono">PRICE ONLY</span></div>
+      <div className="vc-main mono">${d.rawQuote.tokenPrice.toLocaleString(undefined, {maximumFractionDigits: 6})}</div>
+      <div className="muted">Valuation unavailable - excluded from comparisons</div>
+      <div className="mono">{d.symbol}</div>
+      <div className="muted" style={{fontSize:11,lineHeight:1.5}}>{d.reason}</div>
+      {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer">Official rules</a>}
+    </div>
+  );
   const meta = STRUCT_META[d.structure] || { sym: "?", tone: "neutral", label: d.structure };
   return (
     <div className="venue-card vc-disabled" title={d.reason}>
@@ -1756,7 +1766,7 @@ function VenueSection({ kind, rows, disabled, refFdv, cons }) {
           <span className="vc-section-sub muted">{sub}</span>
         </div>
         <span className="vc-section-count mono muted">
-          {rows.length} live · {disabled.length} disabled
+          {rows.length} live · {disabled.filter(d => d.rawQuote).length} price only / {disabled.filter(d => !d.rawQuote).length} disabled
         </span>
       </div>
       {!hasAny ? (

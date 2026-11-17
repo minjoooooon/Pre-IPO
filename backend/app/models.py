@@ -57,6 +57,7 @@ class Market(BaseModel):
     valuation_basis_shares: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     rules_reviewed_at: datetime | None = None
     valuation_valid_until: AwareDatetime | None = None
+    quote_only: bool = False
 
     @property
     def market_id(self) -> str:
